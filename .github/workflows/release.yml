@@ -1,0 +1,64 @@
+name: Release
+
+# Builds the plugin from source and attaches signed provenance to the release
+# assets, so anyone can verify the main.js they downloaded was built from this
+# repository at this commit:
+#
+#   gh attestation verify main.js --repo SirHobby/doms
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+  # Both are required to mint an attestation.
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify
+        run: |
+          npm run typecheck
+          npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Check the tag matches manifest.json
+        run: |
+          MANIFEST=$(node -p "require('./manifest.json').version")
+          if [ "$MANIFEST" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match manifest version $MANIFEST"
+            exit 1
+          fi
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            main.js manifest.json styles.css \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
