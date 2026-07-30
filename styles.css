@@ -1,0 +1,1648 @@
+/* =========================================================================
+   D.O.M.S
+
+   One indirection layer (spec §6). Every rule below references a --doms-*
+   variable, never a literal color. The preset block is the only place in this
+   file where a hex value is allowed to appear.
+
+   Everything is scoped under .doms-view so nothing can leak into the rest of
+   the vault.
+   ========================================================================= */
+
+/* Widgets render inside notes, outside the view, so the variable layer has to
+   reach both. Same tokens, two hosts. */
+.doms-view,
+.doms-widget {
+  /* Colors ---------------------------------------------------------------- */
+  --doms-accent: var(--interactive-accent);
+  --doms-accent-on: var(--text-on-accent);
+  --doms-bg: var(--background-secondary);
+  --doms-text: var(--text-normal);
+  --doms-muted: var(--text-muted);
+  --doms-success: var(--color-green);
+  --doms-warn: var(--color-orange);
+  --doms-border: var(--background-modifier-border);
+  --doms-hover: var(--background-modifier-hover);
+
+  /* Metrics --------------------------------------------------------------- */
+  --doms-pad: 16px;
+  --doms-gap: 12px;
+  --doms-radius: 10px;
+  /* Minimum touch target. Do not shrink this. */
+  --doms-touch: 44px;
+  /* Obsidian mobile floats a navigation bar over the bottom of the view. */
+  --doms-bottom-clearance: 72px;
+}
+
+/* --- Accent presets ------------------------------------------------------
+   Mid ramp values only, so every one of them stays legible in both light and
+   dark mode. The picker writes a single attribute on a single element, and the
+   default ("inherit") is the absence of that attribute.
+   ------------------------------------------------------------------------ */
+
+.doms-view[data-doms-theme="magenta"],
+.doms-widget[data-doms-theme="magenta"] { --doms-accent: #d4537e; }
+.doms-view[data-doms-theme="violet"]  { --doms-accent: #7f77dd; }
+.doms-view[data-doms-theme="teal"]    { --doms-accent: #1d9e75; }
+.doms-view[data-doms-theme="coral"]   { --doms-accent: #d85a30; }
+.doms-view[data-doms-theme="blue"]    { --doms-accent: #378add; }
+.doms-view[data-doms-theme="amber"]   { --doms-accent: #ba7517; }
+
+/* =========================================================================
+   Shell
+   ========================================================================= */
+
+/* Positioning context for the overlays, which must not scroll with content. */
+.doms-view {
+  position: relative;
+}
+
+/* Nothing in here should ever produce a horizontal scrollbar. Video titles run
+   to 99 characters and users can name an activity anything at all. */
+.doms-view,
+.doms-widget {
+  overflow-wrap: break-word;
+}
+
+/* The content element is the single scroll container. Nothing inside it
+   scrolls independently — nested scrollers are miserable on touch. */
+.doms-view .doms-content {
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: var(--doms-text);
+  -webkit-overflow-scrolling: touch;
+}
+
+/* =========================================================================
+   Tab strip
+   ========================================================================= */
+
+.doms-view .doms-tabstrip {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: stretch;
+  background-color: var(--doms-bg);
+  border-bottom: 1px solid var(--doms-border);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+.doms-view .doms-tab {
+  flex: 1 1 0;
+  min-width: var(--doms-touch);
+  min-height: var(--doms-touch);
+  padding: 0 4px;
+
+  /* Obsidian styles bare buttons; strip it back to a tab. */
+  margin: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  box-shadow: none;
+  background-color: transparent;
+
+  color: var(--doms-muted);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doms-view .doms-tab.is-active {
+  color: var(--doms-accent);
+  border-bottom-color: var(--doms-accent);
+}
+
+/* Hover is an enhancement only — the active tab is already legible without
+   it, so nothing here is hover-only. */
+@media (hover: hover) {
+  .doms-view .doms-tab:hover {
+    background-color: var(--doms-hover);
+    color: var(--doms-text);
+  }
+
+  .doms-view .doms-tab.is-active:hover {
+    color: var(--doms-accent);
+  }
+}
+
+.doms-view .doms-tab:focus-visible {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: -2px;
+}
+
+/* =========================================================================
+   Panels
+   ========================================================================= */
+
+.doms-view .doms-panelhost {
+  padding-left: max(var(--doms-pad), env(safe-area-inset-left));
+  padding-right: max(var(--doms-pad), env(safe-area-inset-right));
+  padding-top: var(--doms-pad);
+  padding-bottom: calc(
+    var(--doms-bottom-clearance) + env(safe-area-inset-bottom)
+  );
+}
+
+.doms-view .doms-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--doms-gap);
+}
+
+.doms-view .doms-placeholder {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+  border: 1px dashed var(--doms-border);
+  border-radius: var(--doms-radius);
+  padding: var(--doms-pad);
+}
+
+/* =========================================================================
+   ASCII banners
+   ========================================================================= */
+
+/* Banner plus an optional control. Wraps on narrow screens, so the control
+   drops below the banner rather than squeezing it. */
+.doms-view .doms-titlerow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--doms-gap);
+}
+
+.doms-view .doms-ascii {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.doms-view .doms-motivate {
+  flex: 0 0 auto;
+  min-height: var(--doms-touch);
+  padding: 0 18px;
+  border: 1px dashed var(--doms-accent);
+  border-radius: calc(var(--doms-touch) / 2);
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--doms-accent);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .doms-view .doms-motivate:hover {
+    border-style: solid;
+    background-color: var(--doms-hover);
+  }
+}
+
+.doms-view .doms-motivate:focus-visible {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: 2px;
+}
+
+.doms-view .doms-ascii-art {
+  /* font-size is set inline by the fit calculation. */
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--doms-accent);
+  font-family: var(--font-monospace);
+  font-weight: normal;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: pre;
+  overflow: hidden;
+  /* Decorative, and selecting it just yields a pile of slashes. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Shown instead of the banner when ASCII titles are turned off. */
+.doms-view .doms-ascii-plain {
+  margin: 0;
+  color: var(--doms-accent);
+  font-size: var(--h2-size);
+  line-height: 1.2;
+}
+
+.doms-view .doms-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+}
+
+/* =========================================================================
+   Buttons
+   ========================================================================= */
+
+.doms-view .doms-button {
+  min-height: var(--doms-touch);
+  width: 100%;
+  padding: 0 var(--doms-pad);
+  border: 1px solid var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: transparent;
+  color: var(--doms-text);
+  font-size: var(--font-ui-medium);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doms-view .doms-button-primary {
+  background-color: var(--doms-accent);
+  border-color: var(--doms-accent);
+  color: var(--doms-accent-on);
+  font-weight: var(--font-semibold);
+}
+
+.doms-view .doms-button-secondary {
+  color: var(--doms-muted);
+}
+
+.doms-view .doms-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* =========================================================================
+   Week tab
+   ========================================================================= */
+
+.doms-view .doms-week {
+  display: flex;
+  flex-direction: column;
+  gap: var(--doms-gap);
+}
+
+.doms-view .doms-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doms-view .doms-summary-line {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-small);
+}
+
+.doms-view .doms-pips {
+  display: flex;
+  gap: 8px;
+}
+
+.doms-view .doms-pip {
+  flex: 1 1 0;
+  height: 6px;
+  border-radius: 3px;
+  background-color: var(--doms-border);
+}
+
+.doms-view .doms-pip.is-done {
+  background-color: var(--doms-accent);
+}
+
+/* --- slot cards ---------------------------------------------------------- */
+
+.doms-view .doms-slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border-radius: var(--doms-radius);
+  color: var(--doms-text);
+  font-size: var(--font-ui-medium);
+}
+
+.doms-view .doms-slot-open {
+  flex-wrap: wrap;
+  min-height: 72px;
+  padding: var(--doms-pad);
+  border: 1px solid var(--doms-border);
+  background-color: var(--doms-bg);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doms-view .doms-slot-open.is-suggested {
+  border-color: var(--doms-accent);
+  border-width: 2px;
+}
+
+/* Completed slots collapse to one line — the decision is already made. */
+.doms-view .doms-slot-done {
+  min-height: var(--doms-touch);
+  padding: 0 var(--doms-pad);
+  color: var(--doms-muted);
+  font-size: var(--font-ui-small);
+}
+
+.doms-view .doms-slot-check {
+  color: var(--doms-success);
+  font-weight: var(--font-bold);
+}
+
+.doms-view .doms-slot-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: var(--font-medium);
+}
+
+.doms-view .doms-slot-meta {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-small);
+}
+
+.doms-view .doms-slot-nudge {
+  flex: 1 1 100%;
+  color: var(--doms-accent);
+  font-size: var(--font-ui-small);
+}
+
+.doms-view .doms-slot-open:focus-visible,
+.doms-view .doms-bonus-card:focus-visible,
+.doms-view .doms-button:focus-visible,
+.doms-view .doms-stepper-button:focus-visible,
+.doms-view .doms-bonus-option:focus-visible,
+.doms-view .doms-toast-undo:focus-visible,
+.doms-view .doms-sheet-back:focus-visible {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: 2px;
+}
+
+/* --- bonus --------------------------------------------------------------- */
+
+.doms-view .doms-bonus {
+  display: flex;
+  flex-direction: column;
+  gap: var(--doms-gap);
+}
+
+.doms-view .doms-bonus-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 64px;
+  padding: var(--doms-pad);
+  text-align: left;
+  border: 1px dashed var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: transparent;
+  color: var(--doms-text);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doms-view .doms-bonus-card.is-locked {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.doms-view .doms-bonus-title {
+  font-weight: var(--font-medium);
+}
+
+.doms-view .doms-bonus-hint {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-small);
+}
+
+.doms-view .doms-bonus-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.doms-view .doms-bonus-option {
+  flex: 1 1 90px;
+  min-height: var(--doms-touch);
+  border: 1px solid var(--doms-accent);
+  border-radius: var(--doms-radius);
+  background-color: transparent;
+  color: var(--doms-accent);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* =========================================================================
+   Session sheet
+   ========================================================================= */
+
+.doms-view .doms-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--doms-gap);
+}
+
+.doms-view .doms-sheet-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.doms-view .doms-sheet-back {
+  min-height: var(--doms-touch);
+  min-width: var(--doms-touch);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--doms-radius);
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--doms-accent);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doms-view .doms-sheet-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--doms-text);
+  font-size: var(--font-ui-large);
+}
+
+/* Two columns: shorter to scroll, and it gives the +/- buttons room to grow. */
+.doms-view .doms-sheet-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* At 320px a half-width card leaves exactly enough room for two 44px buttons
+   and the count, with nothing to spare. Drop to one column rather than ship a
+   layout with zero slack. */
+@media (max-width: 359px) {
+  .doms-view .doms-sheet-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.doms-view .doms-sheet-total {
+  padding-top: 4px;
+  color: var(--doms-muted);
+  font-size: var(--font-ui-small);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.doms-view .doms-sheet-total.is-met {
+  color: var(--doms-success);
+  font-weight: var(--font-semibold);
+}
+
+.doms-view .doms-sheet-note,
+.doms-view .doms-sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doms-view .doms-sheet-textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px;
+  border: 1px solid var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: var(--doms-bg);
+  color: var(--doms-text);
+  font-family: inherit;
+  font-size: var(--font-ui-medium);
+  resize: vertical;
+}
+
+/* --- steppers ------------------------------------------------------------ */
+
+.doms-view .doms-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: var(--doms-bg);
+}
+
+.doms-view .doms-stepper-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.doms-view .doms-stepper-label {
+  min-width: 0;
+  color: var(--doms-text);
+  font-size: var(--font-ui-small);
+  text-transform: capitalize;
+  overflow-wrap: anywhere;
+}
+
+.doms-view .doms-stepper-goal {
+  flex: 0 0 auto;
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+}
+
+.doms-view .doms-stepper.is-met {
+  border-color: var(--doms-success);
+}
+
+.doms-view .doms-stepper.is-met .doms-stepper-goal,
+.doms-view .doms-stepper.is-met .doms-stepper-count {
+  color: var(--doms-success);
+}
+
+.doms-view .doms-stepper-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.doms-view .doms-stepper-button {
+  /* Fills the card width, so the tap area is far bigger than the 44px floor. */
+  flex: 1 1 0;
+  min-width: var(--doms-touch);
+  height: var(--doms-touch);
+  padding: 0;
+  border: 1px solid var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--doms-accent);
+  font-size: var(--font-ui-large);
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doms-view .doms-stepper-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.doms-view .doms-stepper-count {
+  min-width: 2.5ch;
+  color: var(--doms-text);
+  font-size: var(--font-ui-large);
+  font-weight: var(--font-semibold);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* =========================================================================
+   Stats tab
+   ========================================================================= */
+
+.doms-view .doms-stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--doms-gap);
+}
+
+.doms-view .doms-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+}
+
+.doms-view .doms-section-title {
+  margin: 0;
+  color: var(--doms-text);
+  font-size: var(--font-ui-medium);
+}
+
+.doms-view .doms-section-note {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+}
+
+.doms-view .doms-empty {
+  padding: var(--doms-pad);
+  border: 1px dashed var(--doms-border);
+  border-radius: var(--doms-radius);
+  color: var(--doms-muted);
+  font-size: var(--font-ui-small);
+}
+
+/* --- metric cards -------------------------------------------------------- */
+
+.doms-view .doms-metrics {
+  display: grid;
+  /* Two up at 360px, four up as soon as there is room. */
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.doms-view .doms-metric {
+  padding: var(--doms-pad);
+  border: 1px solid var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: var(--doms-bg);
+}
+
+.doms-view .doms-metric-value {
+  color: var(--doms-accent);
+  font-size: 1.6em;
+  font-weight: var(--font-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.doms-view .doms-metric-label {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+/* --- month calendar ------------------------------------------------------ */
+
+.doms-view .doms-calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doms-view .doms-calendar-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.doms-view .doms-calendar-arrow {
+  width: var(--doms-touch);
+  height: var(--doms-touch);
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--doms-accent);
+  font-size: var(--font-ui-large);
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doms-view .doms-calendar-arrow:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.doms-view .doms-calendar-arrow:focus-visible {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: 2px;
+}
+
+.doms-view .doms-calendar-label {
+  flex: 1 1 auto;
+  text-align: center;
+  color: var(--doms-text);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+}
+
+.doms-view .doms-calendar-weekdays,
+.doms-view .doms-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.doms-view .doms-calendar-weekday {
+  padding-bottom: 2px;
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  text-align: center;
+}
+
+/* Every cell is the same size. Intensity is fill, never geometry.
+   Fixed height rather than a square aspect ratio: the grid stretches to fill
+   the pane, and square cells would grow into 200px tiles on a wide desktop. */
+.doms-view .doms-calendar-cell {
+  position: relative;
+  z-index: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background-color: var(--doms-border);
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+}
+
+.doms-view .doms-calendar-cell.is-blank {
+  background-color: transparent;
+}
+
+/* The fill sits behind the date number so the number never dims with it. */
+.doms-view .doms-calendar-cell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background-color: var(--doms-accent);
+  opacity: 0;
+}
+
+.doms-view .doms-calendar-cell[data-level="1"]::before { opacity: 0.3; }
+.doms-view .doms-calendar-cell[data-level="2"]::before { opacity: 0.55; }
+.doms-view .doms-calendar-cell[data-level="3"]::before { opacity: 0.8; }
+.doms-view .doms-calendar-cell[data-level="4"]::before { opacity: 1; }
+
+.doms-view .doms-calendar-cell[data-level="3"],
+.doms-view .doms-calendar-cell[data-level="4"] {
+  color: var(--doms-accent-on);
+}
+
+.doms-view .doms-calendar-cell.is-today {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: 1px;
+  color: var(--doms-text);
+}
+
+.doms-view .doms-calendar-cell.is-today[data-level="3"],
+.doms-view .doms-calendar-cell.is-today[data-level="4"] {
+  color: var(--doms-accent-on);
+}
+
+.doms-view .doms-calendar-footer {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+/* --- bars ---------------------------------------------------------------- */
+
+.doms-view .doms-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.doms-view .doms-bar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 7em) 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.doms-view .doms-bar-label {
+  color: var(--doms-text);
+  font-size: var(--font-ui-smaller);
+  text-transform: capitalize;
+  overflow-wrap: anywhere;
+}
+
+.doms-view .doms-bar-track {
+  height: 8px;
+  border-radius: 4px;
+  background-color: var(--doms-border);
+  overflow: hidden;
+}
+
+.doms-view .doms-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background-color: var(--doms-accent);
+}
+
+.doms-view .doms-bar-value {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+}
+
+/* =========================================================================
+   Activity picker (a different workout)
+   ========================================================================= */
+
+.doms-view .doms-other {
+  display: flex;
+  flex-direction: column;
+  gap: var(--doms-gap);
+}
+
+.doms-view .doms-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.doms-view .doms-chip {
+  min-height: var(--doms-touch);
+  padding: 0 16px;
+  border: 1px solid var(--doms-border);
+  border-radius: calc(var(--doms-touch) / 2);
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--doms-text);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doms-view .doms-chip.is-selected {
+  border-color: var(--doms-accent);
+  color: var(--doms-accent);
+  font-weight: var(--font-semibold);
+}
+
+.doms-view .doms-chip:focus-visible {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: 2px;
+}
+
+.doms-view .doms-input {
+  width: 100%;
+  min-height: var(--doms-touch);
+  padding: 0 12px;
+  border: 1px solid var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: var(--doms-bg);
+  color: var(--doms-text);
+  font-family: inherit;
+  font-size: var(--font-ui-medium);
+}
+
+/* =========================================================================
+   Content tabs (Ideas / Rehab)
+   ========================================================================= */
+
+.doms-view .doms-content-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--doms-gap);
+}
+
+.doms-view .doms-prompt {
+  color: var(--doms-text);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-medium);
+}
+
+.doms-view .doms-disclaimer {
+  padding: 10px var(--doms-pad);
+  border-left: 3px solid var(--doms-warn);
+  border-radius: 4px;
+  background-color: var(--doms-bg);
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.45;
+}
+
+/* Distinct from a normal paragraph on purpose — this is a safety note, or an
+   action the user needs to see rather than scroll past. */
+.doms-view .doms-caution {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px var(--doms-pad);
+  border: 1px solid var(--doms-warn);
+  border-radius: var(--doms-radius);
+  color: var(--doms-text);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.45;
+}
+
+/* --- picker -------------------------------------------------------------- */
+
+/* Nineteen categories do not fit one pill row, so the grid wraps under group
+   headings. Selection is still a single tap. */
+.doms-view .doms-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.doms-view .doms-picker-group {
+  margin-top: 4px;
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.doms-view .doms-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.doms-view .doms-chip {
+  min-height: var(--doms-touch);
+  padding: 0 14px;
+  border: 1px solid var(--doms-border);
+  border-radius: calc(var(--doms-touch) / 2);
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--doms-text);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doms-view .doms-chip.is-selected {
+  border-color: var(--doms-accent);
+  color: var(--doms-accent);
+  font-weight: var(--font-semibold);
+}
+
+.doms-view .doms-chip:focus-visible {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: 2px;
+}
+
+/* --- exercise cards ------------------------------------------------------ */
+
+.doms-view .doms-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doms-view .doms-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px var(--doms-pad);
+  border: 1px solid var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: var(--doms-bg);
+  color: var(--doms-text);
+}
+
+.doms-view .doms-card-title {
+  color: var(--doms-text);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-medium);
+}
+
+.doms-view .doms-card-desc {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.45;
+}
+
+/* --- video links --------------------------------------------------------- */
+
+.doms-view .doms-video-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.doms-view a.doms-video {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--doms-touch);
+  padding: 6px 10px;
+  border: 1px solid var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: var(--background-primary);
+  color: var(--doms-text);
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doms-view a.doms-video:hover {
+  border-color: var(--doms-accent);
+}
+
+.doms-view a.doms-video:focus-visible {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: 2px;
+}
+
+.doms-view .doms-video-icon {
+  flex: 0 0 auto;
+  color: var(--doms-accent);
+  font-size: var(--font-ui-smaller);
+}
+
+.doms-view .doms-video-text {
+  min-width: 0;
+}
+
+.doms-view .doms-video-title {
+  color: var(--doms-accent);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+/* Attribution is not optional on a third party link. */
+.doms-view .doms-video-source {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  opacity: 0.8;
+}
+
+/* =========================================================================
+   Undo toast
+   ========================================================================= */
+
+.doms-view .doms-toast {
+  position: absolute;
+  z-index: 20;
+  left: max(var(--doms-pad), env(safe-area-inset-left));
+  right: max(var(--doms-pad), env(safe-area-inset-right));
+  bottom: calc(var(--doms-bottom-clearance) + env(safe-area-inset-bottom));
+
+  display: flex;
+  align-items: center;
+  gap: var(--doms-gap);
+  min-height: var(--doms-touch);
+  padding: 0 8px 0 var(--doms-pad);
+
+  border: 1px solid var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: var(--background-primary);
+  box-shadow: var(--shadow-s);
+  color: var(--doms-text);
+  font-size: var(--font-ui-small);
+
+  animation: doms-toast-in 160ms ease-out;
+}
+
+.doms-view .doms-toast-message {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.doms-view .doms-toast-undo {
+  min-height: var(--doms-touch);
+  padding: 0 var(--doms-pad);
+  border: 0;
+  border-radius: var(--doms-radius);
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--doms-accent);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@keyframes doms-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================================================
+   Celebration (tier one: CSS and inline SVG only, no assets)
+   ========================================================================= */
+
+.doms-view .doms-celebration {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--doms-gap);
+
+  /* Never blocks the next action — taps go straight through. */
+  pointer-events: none;
+}
+
+.doms-view .doms-celebration-image {
+  max-width: min(70%, 320px);
+  max-height: 50%;
+  border-radius: var(--doms-radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-l);
+  animation: doms-pop 300ms ease-out;
+}
+
+.doms-view .doms-celebration-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+@keyframes doms-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.doms-view .doms-celebration-burst {
+  width: 128px;
+  height: 128px;
+}
+
+.doms-view .doms-celebration-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.doms-view .doms-celebration-ring {
+  fill: none;
+  stroke: var(--doms-accent);
+  stroke-width: 4;
+  transform-origin: 50% 50%;
+  animation: doms-ring 800ms ease-out forwards;
+}
+
+.doms-view .doms-celebration-ray {
+  stroke: var(--doms-accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+  transform-origin: 50% 50%;
+  animation: doms-ray 800ms ease-out forwards;
+  animation-delay: var(--doms-ray-delay, 0ms);
+}
+
+.doms-view .doms-celebration-message {
+  max-width: 22ch;
+  color: var(--doms-text);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  text-align: center;
+  text-wrap: balance;
+  animation: doms-message 800ms ease-out forwards;
+}
+
+/* Milestone scaling: bigger and longer for a completed week or a streak. */
+.doms-view .doms-celebration-week .doms-celebration-burst {
+  width: 176px;
+  height: 176px;
+}
+
+.doms-view .doms-celebration-week .doms-celebration-ring,
+.doms-view .doms-celebration-week .doms-celebration-ray,
+.doms-view .doms-celebration-week .doms-celebration-message {
+  animation-duration: 1400ms;
+}
+
+.doms-view .doms-celebration-streak .doms-celebration-burst {
+  width: 152px;
+  height: 152px;
+}
+
+.doms-view .doms-celebration-streak .doms-celebration-ring,
+.doms-view .doms-celebration-streak .doms-celebration-ray,
+.doms-view .doms-celebration-streak .doms-celebration-message {
+  animation-duration: 1200ms;
+}
+
+@keyframes doms-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes doms-ray {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+}
+
+@keyframes doms-message {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  25% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* =========================================================================
+   Motivation modal
+   ========================================================================= */
+
+/* The badge hangs outside the dialog, so the dialog must not clip it, and it
+   needs headroom above so nothing runs off the top of a short screen. */
+.doms-motivation.modal {
+  position: relative;
+  overflow: visible;
+  max-width: 560px;
+  margin-top: 100px;
+  text-align: center;
+  padding-top: 0;
+}
+
+.doms-motivation .doms-motivation-badge {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 164px;
+  height: 164px;
+  border-radius: 50%;
+  border: 0;
+  /* Sits over the dialog edge, so it needs its own opaque fill. */
+  background-color: var(--background-primary);
+  box-shadow: var(--shadow-l);
+}
+
+.doms-motivation .doms-motivation-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52%;
+  height: 52%;
+  color: var(--doms-accent);
+}
+
+/* setIcon injects a Lucide <svg> with its own dimensions; override them so the
+   icon scales with the badge instead of sitting at 16px in the middle of it. */
+.doms-motivation .doms-motivation-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke-width: 1.25;
+}
+
+/* Clear the half of the badge that overlaps the dialog. */
+.doms-motivation .doms-motivation-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--doms-gap);
+  padding: 98px calc(var(--doms-pad) * 2) var(--doms-gap);
+}
+
+.doms-motivation .doms-motivation-quote {
+  color: var(--doms-text);
+  font-size: var(--font-ui-large);
+  font-weight: var(--font-semibold);
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
+.doms-motivation .doms-motivation-rule {
+  height: 1px;
+  background-color: var(--doms-border);
+}
+
+.doms-motivation .doms-motivation-author {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-small);
+}
+
+.doms-motivation .doms-motivation-actions {
+  display: flex;
+  gap: var(--doms-gap);
+  padding: 0 calc(var(--doms-pad) * 2) calc(var(--doms-pad) * 1.5);
+}
+
+.doms-motivation .doms-motivation-actions .doms-button {
+  flex: 1 1 0;
+}
+
+.doms-motivation .doms-button-secondary {
+  border-color: var(--doms-accent);
+  color: var(--doms-accent);
+}
+
+/* A phone in landscape has no room for a 190px badge plus the dialog. */
+@media (max-width: 480px) {
+  .doms-motivation .doms-motivation-body,
+  .doms-motivation .doms-motivation-actions {
+    padding-left: var(--doms-pad);
+    padding-right: var(--doms-pad);
+  }
+}
+
+@media (max-height: 560px) {
+  .doms-motivation.modal {
+    margin-top: 70px;
+  }
+  .doms-motivation .doms-motivation-badge {
+    width: 116px;
+    height: 116px;
+  }
+  .doms-motivation .doms-motivation-body {
+    padding-top: 70px;
+  }
+}
+
+/* =========================================================================
+   Widgets (code blocks embedded in notes)
+
+   These render outside .doms-view, so they carry their own variable host. No
+   !important anywhere: a user's snippet has to be able to win.
+   ========================================================================= */
+
+.doms-widget {
+  display: block;
+  padding: var(--doms-pad);
+  border: 1px solid var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: var(--doms-bg);
+  color: var(--doms-text);
+}
+
+.doms-widget .doms-widget-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--doms-gap);
+  margin-bottom: 10px;
+}
+
+.doms-widget .doms-widget-title {
+  color: var(--doms-text);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+}
+
+.doms-widget .doms-widget-count {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+}
+
+.doms-widget .doms-widget-empty,
+.doms-widget .doms-widget-note {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+/* --- activity ------------------------------------------------------------ */
+
+.doms-widget .doms-widget-weekdays,
+.doms-widget .doms-widget-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.doms-widget .doms-widget-weekday {
+  padding-bottom: 2px;
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  text-align: center;
+}
+
+.doms-widget .doms-widget-cell {
+  position: relative;
+  z-index: 0;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background-color: var(--doms-border);
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+}
+
+.doms-widget .doms-widget-cell.is-blank {
+  background-color: transparent;
+}
+
+/* Fill sits behind the number so the date never dims with the intensity. */
+.doms-widget .doms-widget-cell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background-color: var(--doms-accent);
+  opacity: 0;
+}
+
+.doms-widget .doms-widget-cell[data-level="1"]::before { opacity: 0.3; }
+.doms-widget .doms-widget-cell[data-level="2"]::before { opacity: 0.55; }
+.doms-widget .doms-widget-cell[data-level="3"]::before { opacity: 0.8; }
+.doms-widget .doms-widget-cell[data-level="4"]::before { opacity: 1; }
+
+.doms-widget .doms-widget-cell[data-level="3"],
+.doms-widget .doms-widget-cell[data-level="4"] {
+  color: var(--doms-accent-on);
+}
+
+.doms-widget .doms-widget-cell.is-today {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: 1px;
+}
+
+/* --- activity, dot view --------------------------------------------------- */
+
+.doms-widget .doms-widget-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.doms-widget .doms-widget-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: var(--doms-border);
+}
+
+.doms-widget .doms-widget-dot[data-level="1"] { background-color: var(--doms-accent); opacity: 0.35; }
+.doms-widget .doms-widget-dot[data-level="2"] { background-color: var(--doms-accent); opacity: 0.6; }
+.doms-widget .doms-widget-dot[data-level="3"] { background-color: var(--doms-accent); opacity: 0.8; }
+.doms-widget .doms-widget-dot[data-level="4"] { background-color: var(--doms-accent); opacity: 1; }
+
+.doms-widget .doms-widget-dot.is-today {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: 2px;
+}
+
+/* --- quote ---------------------------------------------------------------- */
+
+.doms-widget .doms-widget-quote {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--doms-gap);
+}
+
+.doms-widget .doms-widget-quote-icon {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  color: var(--doms-accent);
+}
+
+.doms-widget .doms-widget-quote-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke-width: 1.25;
+}
+
+.doms-widget .doms-widget-quote-body {
+  min-width: 0;
+}
+
+/* Long quotes must wrap, never clip. */
+.doms-widget .doms-widget-quote-text {
+  color: var(--doms-text);
+  font-size: var(--font-ui-medium);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.doms-widget .doms-widget-quote-author {
+  margin-top: 4px;
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  overflow-wrap: anywhere;
+}
+
+.doms-widget .doms-widget-reroll {
+  flex: 0 0 auto;
+  min-height: var(--doms-touch);
+  padding: 0 12px;
+  border: 1px solid var(--doms-border);
+  border-radius: var(--doms-radius);
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--doms-accent);
+  font-size: var(--font-ui-smaller);
+  cursor: pointer;
+}
+
+/* --- quick log ------------------------------------------------------------ */
+
+.doms-widget .doms-widget-logbutton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  /* Comfortably past the 44px floor: this is used one-handed, mid-session. */
+  min-height: 56px;
+  padding: 0 var(--doms-pad);
+  border: 0;
+  border-radius: var(--doms-radius);
+  background-color: var(--doms-accent);
+  box-shadow: none;
+  color: var(--doms-accent-on);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doms-widget .doms-widget-logicon {
+  display: flex;
+  align-items: center;
+}
+
+.doms-widget .doms-widget-logicon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.doms-widget .doms-widget-logbutton:focus-visible,
+.doms-widget .doms-widget-reroll:focus-visible {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: 2px;
+}
+
+/* Phones only — tablets use the desktop layout, so is-mobile is not "small". */
+body.is-mobile .doms-widget .doms-widget-cell {
+  height: 30px;
+}
+
+body.is-mobile .doms-widget .doms-widget-logbutton {
+  min-height: 60px;
+}
+
+/* =========================================================================
+   Motion
+   ========================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .doms-view *,
+  .doms-view *::before,
+  .doms-view *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* The celebration animates to opacity 0, so collapsing its duration would
+     erase it entirely. Drop the motion, keep the moment. */
+  .doms-view .doms-celebration-ring,
+  .doms-view .doms-celebration-ray,
+  .doms-view .doms-celebration-message {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+}

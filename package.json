@@ -1,0 +1,21 @@
+{
+  "name": "doms",
+  "version": "0.1.0",
+  "description": "D.O.M.S — an opinionated, mobile-first workout tracker for Obsidian.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs dev",
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "typecheck": "tsc --noEmit",
+    "check": "esbuild tools/check-data.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/doms-check.mjs --alias:obsidian=./tools/obsidian-stub.ts --log-level=error && node node_modules/.cache/doms-check.mjs",
+    "links": "esbuild tools/dump-links.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/doms-links.mjs --alias:obsidian=./tools/obsidian-stub.ts --log-level=error && node node_modules/.cache/doms-links.mjs"
+  },
+  "keywords": [],
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "obsidian": "^1.7.2",
+    "typescript": "^5.9.2"
+  }
+}
