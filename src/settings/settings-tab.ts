@@ -339,7 +339,7 @@ export class DomsSettingTab extends PluginSettingTab {
         "Overwrites the starter notes with the current versions. Use this after an update changes the content format. Notes you added yourself are untouched, but your edits to a starter note will be lost.",
       )
       .addButton((button) =>
-        button.setButtonText("Replace").setWarning().onClick(() => {
+        button.setButtonText("Replace").onClick(() => {
           new ConfirmModal(this.app, {
             title: "Replace starter content?",
             body: [

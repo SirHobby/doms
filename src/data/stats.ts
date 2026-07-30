@@ -128,7 +128,7 @@ export function buildMonth(
   const total = daysInMonth(year, month);
   const lead = dayIndexInWeek({ year, month, day: 1 }, weekStart);
 
-  const cells: Array<DayCell | null> = new Array(lead).fill(null);
+  const cells: Array<DayCell | null> = Array.from({ length: lead }, () => null);
   let sessionCount = 0;
   let totalSets = 0;
 

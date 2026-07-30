@@ -1,6 +1,7 @@
-import { App, TFile, normalizePath } from "obsidian";
+import { App, TFile } from "obsidian";
 import type { ContentVideo } from "./content-videos";
 import { ideasFolder, rehabFolder } from "./paths";
+import { markdownFilesIn } from "./vault-files";
 
 export type ContentCategory = "ideas" | "rehab";
 
@@ -154,13 +155,11 @@ export function loadContent(
   root: string,
   category: ContentCategory,
 ): ContentNote[] {
-  const prefix = `${normalizePath(categoryFolder(root, category))}/`;
   const notes: ContentNote[] = [];
 
-  for (const file of app.vault.getMarkdownFiles()) {
-    if (!file.path.startsWith(prefix)) continue;
-
-    const fm = app.metadataCache.getFileCache(file)?.frontmatter;
+  for (const file of markdownFilesIn(app, categoryFolder(root, category))) {
+    const fm: Record<string, unknown> | undefined =
+      app.metadataCache.getFileCache(file)?.frontmatter;
     // Tolerate a missing marker: anything the user drops in the folder counts.
     if (fm?.doms && fm.doms !== "content") continue;
 

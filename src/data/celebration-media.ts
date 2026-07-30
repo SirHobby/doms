@@ -1,4 +1,5 @@
-import { App, TFile, normalizePath } from "obsidian";
+import { App, TFile } from "obsidian";
+import { filesIn } from "./vault-files";
 
 /**
  * Tier two celebration (spec §4.3): the user points a setting at a vault folder
@@ -19,17 +20,12 @@ const IMAGE_EXTENSIONS = new Set([
 ]);
 
 export function celebrationImages(app: App, folder: string): TFile[] {
-  const trimmed = folder.trim();
+  const trimmed = folder.trim().replace(/^\/+|\/+$/g, "");
   if (!trimmed) return [];
 
-  const prefix = `${normalizePath(trimmed.replace(/^\/+|\/+$/g, ""))}/`;
-  return app.vault
-    .getFiles()
-    .filter(
-      (file) =>
-        file.path.startsWith(prefix) &&
-        IMAGE_EXTENSIONS.has(file.extension.toLowerCase()),
-    );
+  return filesIn(app, trimmed).filter((file) =>
+    IMAGE_EXTENSIONS.has(file.extension.toLowerCase()),
+  );
 }
 
 /**

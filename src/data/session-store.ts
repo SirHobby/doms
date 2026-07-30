@@ -11,6 +11,10 @@ import {
 import { contentFolder, ideasFolder, logFolder, rehabFolder, sessionPath } from "./paths";
 import type { MuscleGroup } from "./templates";
 import type { CommitInput, SessionRecord, SlotKind } from "./types";
+import { markdownFilesIn } from "./vault-files";
+
+/** Frontmatter as it actually is: string keys, unknown values. */
+type Frontmatter = Record<string, unknown>;
 
 export interface StoreConfig {
   root: string;
@@ -57,11 +61,9 @@ export class SessionStore {
 
   /** Every valid session note in the log folder, oldest first. */
   listSessions(): SessionRecord[] {
-    const prefix = `${logFolder(this.root)}/`;
     const records: SessionRecord[] = [];
 
-    for (const file of this.app.vault.getMarkdownFiles()) {
-      if (!file.path.startsWith(prefix)) continue;
+    for (const file of markdownFilesIn(this.app, logFolder(this.root))) {
       const record = this.parse(file);
       if (record) records.push(record);
     }
@@ -78,7 +80,10 @@ export class SessionStore {
    * bad note should not take down the whole week view.
    */
   parse(file: TFile): SessionRecord | null {
-    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    // The cache types frontmatter as `any`; narrow once here rather than
+    // reaching into an untyped value a dozen times below.
+    const fm: Frontmatter | undefined =
+      this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (!fm || fm.doms !== "session") return null;
 
     const date = parseIsoDate(fm.date);
@@ -141,7 +146,7 @@ export class SessionStore {
           : "required";
     const activity = input.activity?.trim() || null;
 
-    await this.app.fileManager.processFrontMatter(file, (fm) => {
+    await this.app.fileManager.processFrontMatter(file, (fm: Frontmatter) => {
       fm.doms = "session";
       fm.date = dateIso;
       fm.week = weekKey;
@@ -214,7 +219,7 @@ export class SessionStore {
   async rewriteWeekKeys(): Promise<number> {
     const stale = this.staleSessions();
     for (const record of stale) {
-      await this.app.fileManager.processFrontMatter(record.file, (fm) => {
+      await this.app.fileManager.processFrontMatter(record.file, (fm: Frontmatter) => {
         fm.week = record.weekKey;
       });
     }
@@ -234,7 +239,7 @@ export class SessionStore {
   async stampPlan(planId: string): Promise<number> {
     const missing = this.sessionsMissingPlan();
     for (const record of missing) {
-      await this.app.fileManager.processFrontMatter(record.file, (fm) => {
+      await this.app.fileManager.processFrontMatter(record.file, (fm: Frontmatter) => {
         fm.plan = planId;
       });
     }

@@ -246,7 +246,6 @@
   overflow: hidden;
   white-space: nowrap;
   clip: rect(0 0 0 0);
-  clip-path: inset(50%);
 }
 
 /* =========================================================================
@@ -1095,7 +1094,6 @@
   color: var(--doms-text);
   font-size: var(--font-ui-small);
 
-  animation: doms-toast-in 160ms ease-out;
 }
 
 .doms-view .doms-toast-message {
@@ -1152,7 +1150,6 @@
   border-radius: var(--doms-radius);
   overflow: hidden;
   box-shadow: var(--shadow-l);
-  animation: doms-pop 300ms ease-out;
 }
 
 .doms-view .doms-celebration-image img {
@@ -1189,7 +1186,6 @@
   stroke: var(--doms-accent);
   stroke-width: 4;
   transform-origin: 50% 50%;
-  animation: doms-ring 800ms ease-out forwards;
 }
 
 .doms-view .doms-celebration-ray {
@@ -1197,8 +1193,6 @@
   stroke-width: 4;
   stroke-linecap: round;
   transform-origin: 50% 50%;
-  animation: doms-ray 800ms ease-out forwards;
-  animation-delay: var(--doms-ray-delay, 0ms);
 }
 
 .doms-view .doms-celebration-message {
@@ -1208,7 +1202,6 @@
   font-weight: var(--font-semibold);
   text-align: center;
   text-wrap: balance;
-  animation: doms-message 800ms ease-out forwards;
 }
 
 /* Milestone scaling: bigger and longer for a completed week or a streak. */
@@ -1217,21 +1210,9 @@
   height: 176px;
 }
 
-.doms-view .doms-celebration-week .doms-celebration-ring,
-.doms-view .doms-celebration-week .doms-celebration-ray,
-.doms-view .doms-celebration-week .doms-celebration-message {
-  animation-duration: 1400ms;
-}
-
 .doms-view .doms-celebration-streak .doms-celebration-burst {
   width: 152px;
   height: 152px;
-}
-
-.doms-view .doms-celebration-streak .doms-celebration-ring,
-.doms-view .doms-celebration-streak .doms-celebration-ray,
-.doms-view .doms-celebration-streak .doms-celebration-message {
-  animation-duration: 1200ms;
 }
 
 @keyframes doms-ring {
@@ -1625,24 +1606,44 @@ body.is-mobile .doms-widget .doms-widget-logbutton {
 
 /* =========================================================================
    Motion
+
+   Animations are declared only under prefers-reduced-motion: no-preference, so
+   there is nothing to override when a user asks for less motion. That avoids
+   !important entirely, which matters because !important would also stop a
+   user's own CSS snippet from overriding these.
    ========================================================================= */
 
-@media (prefers-reduced-motion: reduce) {
-  .doms-view *,
-  .doms-view *::before,
-  .doms-view *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+@media (prefers-reduced-motion: no-preference) {
+  .doms-view .doms-toast {
+    animation: doms-toast-in 160ms ease-out;
   }
 
-  /* The celebration animates to opacity 0, so collapsing its duration would
-     erase it entirely. Drop the motion, keep the moment. */
-  .doms-view .doms-celebration-ring,
-  .doms-view .doms-celebration-ray,
+  .doms-view .doms-celebration-image {
+    animation: doms-pop 300ms ease-out;
+  }
+
+  .doms-view .doms-celebration-ring {
+    animation: doms-ring 800ms ease-out forwards;
+  }
+
+  .doms-view .doms-celebration-ray {
+    animation: doms-ray 800ms ease-out forwards;
+    animation-delay: var(--doms-ray-delay, 0ms);
+  }
+
   .doms-view .doms-celebration-message {
-    animation: none !important;
-    opacity: 1;
-    transform: none;
+    animation: doms-message 800ms ease-out forwards;
+  }
+
+  .doms-view .doms-celebration-week .doms-celebration-ring,
+  .doms-view .doms-celebration-week .doms-celebration-ray,
+  .doms-view .doms-celebration-week .doms-celebration-message {
+    animation-duration: 1400ms;
+  }
+
+  .doms-view .doms-celebration-streak .doms-celebration-ring,
+  .doms-view .doms-celebration-streak .doms-celebration-ray,
+  .doms-view .doms-celebration-streak .doms-celebration-message {
+    animation-duration: 1200ms;
   }
 }
