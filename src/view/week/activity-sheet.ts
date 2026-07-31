@@ -1,4 +1,6 @@
-import { Component } from "obsidian";
+import { Component, type App } from "obsidian";
+import { today, type CivilDate, type WeekDay } from "../../data/dates";
+import { SheetHeader } from "./sheet-header";
 
 export interface ActivitySheetOptions {
   /** Heading, e.g. "Cardio" or "A different workout". */
@@ -7,8 +9,11 @@ export interface ActivitySheetOptions {
   activities: readonly string[];
   /** Text on the commit button. */
   commitText: string;
+  /** For the date picker the header opens. */
+  app: App;
+  weekStart: WeekDay;
   onBack: () => void;
-  onCommit: (activity: string, note: string) => Promise<void>;
+  onCommit: (activity: string, note: string, date: CivilDate) => Promise<void>;
 }
 
 /**
@@ -23,6 +28,7 @@ export class ActivitySheet extends Component {
   private customEl: HTMLInputElement | null = null;
   private noteEl: HTMLTextAreaElement | null = null;
   private commitEl: HTMLButtonElement | null = null;
+  private header: SheetHeader | null = null;
   private chips = new Map<string, HTMLButtonElement>();
   private committing = false;
 
@@ -46,17 +52,13 @@ export class ActivitySheet extends Component {
   }
 
   private renderHeader(root: HTMLElement): void {
-    const header = root.createDiv({ cls: "doms-sheet-header" });
-
-    const back = header.createEl("button", {
-      cls: "doms-sheet-back",
-      text: "← Back",
+    this.header = new SheetHeader(root, {
+      title: this.options.title,
+      app: this.options.app,
+      weekStart: this.options.weekStart,
+      onBack: () => this.options.onBack(),
     });
-    back.type = "button";
-    back.setAttribute("aria-label", "Back to the week");
-    this.registerDomEvent(back, "click", () => this.options.onBack());
-
-    header.createEl("h3", { cls: "doms-sheet-title", text: this.options.title });
+    this.addChild(this.header);
   }
 
   private renderChips(root: HTMLElement): void {
@@ -130,7 +132,11 @@ export class ActivitySheet extends Component {
       commit.setText("Logging…");
 
       try {
-        await this.options.onCommit(activity, this.noteEl?.value.trim() ?? "");
+        await this.options.onCommit(
+          activity,
+          this.noteEl?.value.trim() ?? "",
+          this.header?.value ?? today(),
+        );
       } finally {
         this.committing = false;
       }

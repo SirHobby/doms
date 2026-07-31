@@ -1,12 +1,21 @@
-import { Component } from "obsidian";
+import { Component, type App } from "obsidian";
+import { today, type CivilDate, type WeekDay } from "../../data/dates";
 import type { MuscleGroup, Template } from "../../data/templates";
 import { sumSets } from "../../data/templates";
+import { SheetHeader } from "./sheet-header";
 import { Stepper } from "./stepper";
 
 export interface SessionSheetOptions {
   template: Template;
+  /** For the date picker the header opens. */
+  app: App;
+  weekStart: WeekDay;
   onBack: () => void;
-  onCommit: (sets: Record<MuscleGroup, number>, note: string) => Promise<void>;
+  onCommit: (
+    sets: Record<MuscleGroup, number>,
+    note: string,
+    date: CivilDate,
+  ) => Promise<void>;
 }
 
 /**
@@ -24,6 +33,7 @@ export class SessionSheet extends Component {
   private totalEl: HTMLElement | null = null;
   private commitEl: HTMLButtonElement | null = null;
   private noteEl: HTMLTextAreaElement | null = null;
+  private header: SheetHeader | null = null;
   private committing = false;
 
   constructor(
@@ -67,20 +77,13 @@ export class SessionSheet extends Component {
   }
 
   private renderHeader(root: HTMLElement): void {
-    const header = root.createDiv({ cls: "doms-sheet-header" });
-
-    const back = header.createEl("button", {
-      cls: "doms-sheet-back",
-      text: "← Back",
+    this.header = new SheetHeader(root, {
+      title: this.options.template.name,
+      app: this.options.app,
+      weekStart: this.options.weekStart,
+      onBack: () => this.options.onBack(),
     });
-    back.type = "button";
-    back.setAttribute("aria-label", "Back to the week");
-    this.registerDomEvent(back, "click", () => this.options.onBack());
-
-    header.createEl("h3", {
-      cls: "doms-sheet-title",
-      text: this.options.template.name,
-    });
+    this.addChild(this.header);
   }
 
   private renderNote(root: HTMLElement): void {
@@ -135,6 +138,7 @@ export class SessionSheet extends Component {
           // Nothing counted means "I did the plan" — the one-tap fast path.
           sumSets(this.sets) === 0 ? { ...this.goals } : { ...this.sets },
           this.noteEl?.value.trim() ?? "",
+          this.header?.value ?? today(),
         );
       } finally {
         this.committing = false;

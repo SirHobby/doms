@@ -10,7 +10,7 @@ Your training history is plain markdown in your own vault. If this plugin disapp
 
 ## What it does
 
-**Week** — your routine as a set of slots. Tap one, count your sets as you go, log it. One tap logs the whole session as planned if you did exactly that.
+**Week** — your routine as a set of slots. Tap one, count your sets as you go, log it. One tap logs the whole session as planned if you did exactly that. Forgot to log yesterday? Every logging screen carries a date, so you can put the session on the day it actually happened.
 
 **Stats** — sessions, current and best week streak, total sets, a month-by-month activity calendar, and per-muscle coverage over the last twelve weeks.
 
@@ -63,7 +63,9 @@ Flat frontmatter, so Dataview and Bases can query your training history without 
 
 ## Widgets
 
-Embed these in any note.
+Three blocks you can embed in any note. They are **in-note widgets, not home screen widgets** — Obsidian's mobile apps ship a fixed set of OS widgets and there is no API for a plugin to add to it. For a home screen tap, see [One tap from your home screen](#one-tap-from-your-home-screen) below.
+
+Each has an "Insert …" command, so you do not have to type the fence by hand: open the command palette in a note and search for `D.O.M.S: Insert`.
 
 **Activity** — days trained this month.
 

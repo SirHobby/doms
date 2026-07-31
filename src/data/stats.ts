@@ -3,9 +3,12 @@ import {
   CivilDate,
   compareDates,
   dayIndexInWeek,
+  daysInMonth,
   formatIsoDate,
+  monthLabel,
   startOfWeek,
   today,
+  weekdayLabels,
   weekKeyFor,
   WeekDay,
 } from "./dates";
@@ -84,28 +87,6 @@ export interface MonthGrid {
   totalSets: number;
 }
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-const WEEKDAY_SHORT = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-
-function daysInMonth(year: number, month: number): number {
-  // Day 0 of the next month is the last day of this one.
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
-
-/** Shifts a month by `delta`, wrapping the year. */
-export function shiftMonth(
-  year: number,
-  month: number,
-  delta: number,
-): { year: number; month: number } {
-  const zero = year * 12 + (month - 1) + delta;
-  return { year: Math.floor(zero / 12), month: (zero % 12) + 1 };
-}
-
 /**
  * One calendar month of activity. Cells are a fixed size and differ only in
  * fill, so the grid reads as a calendar rather than a bar chart.
@@ -156,14 +137,11 @@ export function buildMonth(
   // Pad to whole weeks so the grid never has a ragged last row.
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const weekdays: string[] = [];
-  for (let i = 0; i < 7; i++) weekdays.push(WEEKDAY_SHORT[(weekStart + i) % 7]);
-
   return {
     year,
     month,
-    label: `${MONTH_NAMES[month - 1]} ${year}`,
-    weekdays,
+    label: monthLabel(year, month),
+    weekdays: weekdayLabels(weekStart),
     cells,
     sessionCount,
     totalSets,

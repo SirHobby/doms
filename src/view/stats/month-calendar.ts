@@ -1,6 +1,6 @@
 import { Component } from "obsidian";
-import { formatIsoDate, today } from "../../data/dates";
-import { buildMonth, shiftMonth, type StatsOptions } from "../../data/stats";
+import { formatIsoDate, shiftMonth, today } from "../../data/dates";
+import { buildMonth, type StatsOptions } from "../../data/stats";
 import type { SessionRecord } from "../../data/types";
 
 export interface MonthCalendarOptions {

@@ -1,4 +1,4 @@
-import type { MarkdownPostProcessorContext } from "obsidian";
+import type { Editor, MarkdownPostProcessorContext } from "obsidian";
 import { QUOTES, pickQuote, type Quote } from "../data/quotes";
 import { loadQuoteBank } from "../data/quote-store";
 import type DomsPlugin from "../main";
@@ -136,4 +136,44 @@ export function registerWidgets(plugin: DomsPlugin): void {
     "doms-log",
     block(quickLogOptions, (el, p, o) => new QuickLogBlock(el, p, o)),
   );
+
+  registerInsertCommands(plugin);
+}
+
+/**
+ * The widgets are code blocks, which means the only way to get one is to type
+ * the fence by hand and remember the option keys. These commands make them
+ * findable the way everything else in Obsidian is findable — through the
+ * command palette, which on mobile is also what the toolbar pulls from.
+ */
+function registerInsertCommands(plugin: DomsPlugin): void {
+  const widgets: ReadonlyArray<{ id: string; name: string; body: string }> = [
+    {
+      id: "insert-activity-widget",
+      name: "Insert activity calendar",
+      body: "doms-activity\nview: calendar\n",
+    },
+    {
+      id: "insert-quote-widget",
+      name: "Insert quote of the day",
+      body: "doms-quote\n",
+    },
+    {
+      id: "insert-log-widget",
+      name: "Insert quick log button",
+      body: "doms-log\n",
+    },
+  ];
+
+  for (const widget of widgets) {
+    plugin.addCommand({
+      id: widget.id,
+      name: widget.name,
+      editorCallback: (editor: Editor) => {
+        // Trailing newline so the cursor lands on a clean line under the block
+        // rather than glued to the closing fence.
+        editor.replaceSelection("```" + widget.body + "```\n");
+      },
+    });
+  }
 }

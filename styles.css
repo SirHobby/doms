@@ -208,6 +208,11 @@
   outline-offset: 2px;
 }
 
+/* The logging sheets hide the nudge rather than rebuild the banner without it. */
+.doms-view .doms-motivate.is-hidden {
+  display: none;
+}
+
 .doms-view .doms-ascii-art {
   /* font-size is set inline by the fit calculation. */
   margin: 0;
@@ -481,6 +486,42 @@
   margin: 0;
   color: var(--doms-text);
   font-size: var(--font-ui-large);
+}
+
+/* Far right of the header row. Quiet by default — the answer is nearly always
+   "today", so it should read as a label until you need it to be a control. */
+.doms-view .doms-sheet-date {
+  flex: 0 0 auto;
+  min-height: var(--doms-touch);
+  padding: 0 14px;
+  border: 1px solid var(--doms-border);
+  border-radius: calc(var(--doms-touch) / 2);
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--doms-muted);
+  font-size: var(--font-ui-small);
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Logging for another day is the unusual case, so it stops being quiet. */
+.doms-view .doms-sheet-date.is-backdated {
+  border-color: var(--doms-accent);
+  color: var(--doms-accent);
+  font-weight: var(--font-semibold);
+}
+
+@media (hover: hover) {
+  .doms-view .doms-sheet-date:hover {
+    background-color: var(--doms-hover);
+    color: var(--doms-text);
+  }
+}
+
+.doms-view .doms-sheet-date:focus-visible {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: 2px;
 }
 
 /* Two columns: shorter to scroll, and it gives the +/- buttons room to grow. */
@@ -1313,12 +1354,16 @@
   stroke-width: 1.25;
 }
 
-/* Clear the half of the badge that overlaps the dialog. */
+/* Clear the half of the badge that overlaps the dialog. The badge is the reason
+   the dialog cannot be the scroll box, so the quote takes that job instead —
+   the two buttons stay put on a short screen and a long quote still fits. */
 .doms-motivation .doms-motivation-body {
   display: flex;
   flex-direction: column;
   gap: var(--doms-gap);
   padding: 98px calc(var(--doms-pad) * 2) var(--doms-gap);
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .doms-motivation .doms-motivation-quote {
@@ -1354,6 +1399,18 @@
   color: var(--doms-accent);
 }
 
+/* The badge is a child of .modal-content, and on a phone Obsidian gives that
+   element `overflow: auto` so the dialog body can scroll. A scroll box clips,
+   which sheared the top half off the badge on mobile while desktop looked fine.
+   Two class names so this beats `.is-phone .modal-content` on specificity
+   rather than on stylesheet order. */
+.doms-motivation.modal .modal-content {
+  overflow: visible;
+  /* Obsidian also makes this a positioned ancestor on phones, which would
+     otherwise change what the badge is centred on. */
+  position: static;
+}
+
 /* A phone in landscape has no room for a 190px badge plus the dialog. */
 @media (max-width: 480px) {
   .doms-motivation .doms-motivation-body,
@@ -1374,6 +1431,42 @@
   .doms-motivation .doms-motivation-body {
     padding-top: 70px;
   }
+}
+
+/* =========================================================================
+   Date picker
+
+   Reuses the Stats calendar geometry. The difference is that these cells are
+   buttons, so they need a hit target and a selected state.
+   ========================================================================= */
+
+.doms-datepicker .doms-datepicker-shortcuts {
+  margin-bottom: var(--doms-gap);
+}
+
+.doms-view .doms-calendar-cell.doms-datepicker-day {
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doms-view .doms-calendar-cell.doms-datepicker-day:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.doms-view .doms-calendar-cell.doms-datepicker-day.is-selected {
+  background-color: var(--doms-accent);
+  color: var(--doms-accent-on);
+  font-weight: var(--font-semibold);
+}
+
+.doms-view .doms-calendar-cell.doms-datepicker-day:focus-visible {
+  outline: 2px solid var(--doms-accent);
+  outline-offset: 1px;
 }
 
 /* =========================================================================

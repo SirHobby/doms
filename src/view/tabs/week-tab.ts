@@ -1,5 +1,12 @@
-import { Component } from "obsidian";
+import { Component, type App } from "obsidian";
 import { TAB_LABELS, TabId } from "../../constants";
+import {
+  formatShortDate,
+  isSameDate,
+  today,
+  type CivilDate,
+  type WeekDay,
+} from "../../data/dates";
 import { bonusTemplatesFor } from "../../data/plans";
 import {
   CARDIO_ACTIVITIES,
@@ -31,6 +38,8 @@ export class WeekTab extends DomsTab {
   private bodyEl: HTMLElement | null = null;
   /** Children of the body only, so a re-render does not tear down the banner. */
   private bodyChildren: Component[] = [];
+  /** Lives in the banner, so the body cannot rebuild it. Hidden on sheets. */
+  private motivateEl: HTMLElement | null = null;
 
   /**
    * Entry point for quick log. An unknown or missing session lands on the week
@@ -52,9 +61,19 @@ export class WeekTab extends DomsTab {
       text: "Need motivation?",
     });
     button.type = "button";
+    this.motivateEl = button;
     this.registerDomEvent(button, "click", () => {
       new MotivationModal(context.plugin).open();
     });
+  }
+
+  /**
+   * The banner survives a body swap, so the nudge would otherwise follow you
+   * into the logging sheet. Motivation belongs on the week you are looking at,
+   * not on the workout you have already turned up for.
+   */
+  private showMotivate(visible: boolean): void {
+    this.motivateEl?.toggleClass("is-hidden", !visible);
   }
 
   protected renderBody(root: HTMLElement, _context: TabContext): void {
@@ -79,6 +98,7 @@ export class WeekTab extends DomsTab {
   private showWeek(): void {
     const body = this.resetBody();
     if (!body) return;
+    this.showMotivate(true);
 
     const { data } = this.context.plugin;
     const week = data.weekState();
@@ -118,25 +138,34 @@ export class WeekTab extends DomsTab {
   private showActivitySheet(): void {
     const body = this.resetBody();
     if (!body) return;
+    this.showMotivate(false);
 
     this.mount(
       new ActivitySheet(body, {
         title: "A different workout",
         activities: DEFAULT_ACTIVITIES,
         commitText: "Log it",
-        onBack: () => this.showWeek(),
-        onCommit: (activity, note) => this.commitActivity(activity, note),
+        ...this.sheetChrome(),
+        onCommit: (activity, note, date) =>
+          this.commit(OTHER_TEMPLATE_ID, {}, note, date, activity),
       }),
     );
   }
 
-  private commitActivity(activity: string, note: string): Promise<void> {
-    return this.commit(OTHER_TEMPLATE_ID, {}, note, activity);
+  /** What every sheet needs to draw its header and open the date picker. */
+  private sheetChrome(): { app: App; weekStart: WeekDay; onBack: () => void } {
+    const { plugin } = this.context;
+    return {
+      app: plugin.app,
+      weekStart: plugin.settings.weekStart,
+      onBack: () => this.showWeek(),
+    };
   }
 
   private showSheet(templateId: string): void {
     const body = this.resetBody();
     if (!body) return;
+    this.showMotivate(false);
 
     const template = findTemplate(templateId, this.context.plugin.data.templates);
     if (!template) {
@@ -152,9 +181,9 @@ export class WeekTab extends DomsTab {
           title: template.name,
           activities: CARDIO_ACTIVITIES,
           commitText: "Log it",
-          onBack: () => this.showWeek(),
-          onCommit: (activity, note) =>
-            this.commit(templateId, {}, note, activity),
+          ...this.sheetChrome(),
+          onCommit: (activity, note, date) =>
+            this.commit(templateId, {}, note, date, activity),
         }),
       );
       return;
@@ -163,8 +192,9 @@ export class WeekTab extends DomsTab {
     this.mount(
       new SessionSheet(body, {
         template,
-        onBack: () => this.showWeek(),
-        onCommit: (sets, note) => this.commit(templateId, sets, note),
+        ...this.sheetChrome(),
+        onCommit: (sets, note, date) =>
+          this.commit(templateId, sets, note, date),
       }),
     );
   }
@@ -173,6 +203,7 @@ export class WeekTab extends DomsTab {
     templateId: string,
     sets: Record<MuscleGroup, number>,
     note: string,
+    date: CivilDate,
     activity?: string,
   ): Promise<void> {
     const { data } = this.context.plugin;
@@ -182,7 +213,7 @@ export class WeekTab extends DomsTab {
 
     let record: SessionRecord;
     try {
-      record = await data.commit({ templateId, sets, note, activity });
+      record = await data.commit({ templateId, sets, note, date, activity });
     } catch (error) {
       this.context.plugin.reportError(error);
       this.showWeek();
@@ -228,11 +259,16 @@ export class WeekTab extends DomsTab {
   private offerUndo(record: SessionRecord): void {
     const { plugin } = this.context;
 
+    const what = record.activity ?? `${record.totalSets} sets`;
+    // A backdated session may land in a week the view is not showing, so the
+    // toast is the only place that can say where it went.
+    const when = isSameDate(record.date, today())
+      ? ""
+      : ` on ${formatShortDate(record.date)}`;
+
     this.mount(
       new UndoToast(this.context.viewEl, {
-        message: record.activity
-          ? `Logged ${record.activity}.`
-          : `Logged ${record.totalSets} sets.`,
+        message: `Logged ${what}${when}.`,
         onUndo: async () => {
           try {
             await plugin.data.undo(record);
@@ -248,6 +284,7 @@ export class WeekTab extends DomsTab {
   onunload(): void {
     this.bodyChildren = [];
     this.bodyEl = null;
+    this.motivateEl = null;
     super.onunload();
   }
 }

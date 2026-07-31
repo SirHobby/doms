@@ -5,3 +5,4 @@ main.js
 # Local development only. Not part of the plugin.
 test-vault/
 DOMS-SPEC.md
+.claude/

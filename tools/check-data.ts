@@ -233,7 +233,8 @@ console.log("\n== suggested next slot and full body nudge ==");
 
 
 // --- stats -----------------------------------------------------------------
-import { summarize, buildMonth, shiftMonth, intensityLevel, weeklyHitRate, cumulativeVolume } from "../src/data/stats";
+import { summarize, buildMonth, intensityLevel, weeklyHitRate, cumulativeVolume } from "../src/data/stats";
+import { shiftMonth } from "../src/data/dates";
 const NOW = parseIsoDate("2026-07-29")!;
 console.log("\n== stats summary ==");
 {

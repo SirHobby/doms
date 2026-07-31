@@ -26,6 +26,11 @@ export const DAY_NAMES = [
   "Saturday",
 ] as const;
 
+export const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+] as const;
+
 /** 0 = Sunday, matching Date.getDay(). */
 export type WeekDay = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -78,6 +83,45 @@ export function formatIsoDate(date: CivilDate): string {
   const m = String(date.month).padStart(2, "0");
   const d = String(date.day).padStart(2, "0");
   return `${date.year}-${m}-${d}`;
+}
+
+/** "Mon 28 Jul" — short enough to sit beside a session title on a phone. */
+export function formatShortDate(date: CivilDate): string {
+  const weekday = DAY_NAMES[dayOfWeek(date)].slice(0, 3);
+  return `${weekday} ${date.day} ${MONTH_NAMES[date.month - 1].slice(0, 3)}`;
+}
+
+/** "Monday, 28 July 2026" — for labels a screen reader has to read out. */
+export function formatLongDate(date: CivilDate): string {
+  return `${DAY_NAMES[dayOfWeek(date)]}, ${date.day} ${MONTH_NAMES[date.month - 1]} ${date.year}`;
+}
+
+export function monthLabel(year: number, month: number): string {
+  return `${MONTH_NAMES[month - 1]} ${year}`;
+}
+
+/** Two-letter column headings for a calendar grid, rotated to `weekStart`. */
+export function weekdayLabels(weekStart: WeekDay): string[] {
+  const labels: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    labels.push(DAY_NAMES[(weekStart + i) % 7].slice(0, 2));
+  }
+  return labels;
+}
+
+export function daysInMonth(year: number, month: number): number {
+  // Day 0 of the next month is the last day of this one.
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/** Shifts a month by `delta`, wrapping the year. */
+export function shiftMonth(
+  year: number,
+  month: number,
+  delta: number,
+): { year: number; month: number } {
+  const zero = year * 12 + (month - 1) + delta;
+  return { year: Math.floor(zero / 12), month: (zero % 12) + 1 };
 }
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
