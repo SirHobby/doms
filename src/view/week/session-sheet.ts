@@ -11,6 +11,8 @@ export interface SessionSheetOptions {
   /** For the date picker the header opens. */
   app: App;
   weekStart: WeekDay;
+  /** Seeds the header when the flow already chose a day. */
+  date?: CivilDate;
   onBack: () => void;
   onCommit: (
     sets: Record<MuscleGroup, number>,
@@ -82,6 +84,7 @@ export class SessionSheet extends Component {
       title: this.options.template.name,
       app: this.options.app,
       weekStart: this.options.weekStart,
+      date: this.options.date,
       onBack: () => this.options.onBack(),
     });
     this.addChild(this.header);

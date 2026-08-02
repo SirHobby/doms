@@ -78,3 +78,30 @@ export function bonusTemplatesFor(
     (t) => t.kind === "strength" && !plan.slots.includes(t.id),
   );
 }
+
+/**
+ * Everything that can be logged, with the plan's own sessions first.
+ *
+ * Used where there is no week state to order things by — logging a previous
+ * workout, where the whole point is that the week in question has closed.
+ * Repeats collapse: "which workout was it" is answered by the template, not by
+ * which of two push slots it would have filled.
+ */
+export function loggableTemplates(
+  plan: Plan,
+  templates: readonly Template[],
+): Template[] {
+  const inPlan: Template[] = [];
+  const seen = new Set<string>();
+
+  for (const id of plan.slots) {
+    if (seen.has(id)) continue;
+    const template = findTemplate(id, templates);
+    if (template) {
+      inPlan.push(template);
+      seen.add(id);
+    }
+  }
+
+  return [...inPlan, ...templates.filter((t) => !seen.has(t.id))];
+}

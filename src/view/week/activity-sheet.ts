@@ -12,6 +12,8 @@ export interface ActivitySheetOptions {
   /** For the date picker the header opens. */
   app: App;
   weekStart: WeekDay;
+  /** Seeds the header when the flow already chose a day. */
+  date?: CivilDate;
   onBack: () => void;
   onCommit: (activity: string, note: string, date: CivilDate) => Promise<void>;
 }
@@ -56,6 +58,7 @@ export class ActivitySheet extends Component {
       title: this.options.title,
       app: this.options.app,
       weekStart: this.options.weekStart,
+      date: this.options.date,
       onBack: () => this.options.onBack(),
     });
     this.addChild(this.header);

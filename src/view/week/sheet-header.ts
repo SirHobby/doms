@@ -13,6 +13,8 @@ export interface SheetHeaderOptions {
   title: string;
   app: App;
   weekStart: WeekDay;
+  /** The day the sheet opens on. Today, unless the flow already picked one. */
+  date?: CivilDate;
   onBack: () => void;
 }
 
@@ -25,7 +27,7 @@ export interface SheetHeaderOptions {
  * common enough that the answer has to be visible without a tap.
  */
 export class SheetHeader extends Component {
-  private date: CivilDate = today();
+  private date: CivilDate;
   private dateEl: HTMLButtonElement | null = null;
 
   constructor(
@@ -33,6 +35,7 @@ export class SheetHeader extends Component {
     private readonly options: SheetHeaderOptions,
   ) {
     super();
+    this.date = options.date ?? today();
   }
 
   /** The day the sheet will log for. Today unless the user has said otherwise. */

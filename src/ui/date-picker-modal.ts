@@ -4,6 +4,7 @@ import {
   compareDates,
   dayIndexInWeek,
   daysInMonth,
+  earliestLoggableDate,
   formatLongDate,
   isSameDate,
   monthLabel,
@@ -20,8 +21,11 @@ export interface DatePickerOptions {
   weekStart: WeekDay;
   /** Latest pickable day. Defaults to today — you cannot log the future. */
   max?: CivilDate;
+  /** Earliest pickable day. Defaults to the backdate limit. */
+  min?: CivilDate;
   onPick: (date: CivilDate) => void;
 }
+
 
 /**
  * "Which day was this?" — a month grid, plus one-tap shortcuts for the two days
@@ -36,10 +40,12 @@ export class DatePickerModal extends Modal {
   private month: number;
   private selected: CivilDate;
   private readonly max: CivilDate;
+  private readonly min: CivilDate;
 
   private gridEl: HTMLElement | null = null;
   private labelEl: HTMLElement | null = null;
   private nextEl: HTMLButtonElement | null = null;
+  private prevEl: HTMLButtonElement | null = null;
 
   constructor(
     app: App,
@@ -48,6 +54,7 @@ export class DatePickerModal extends Modal {
     super(app);
     this.selected = options.selected;
     this.max = options.max ?? today();
+    this.min = options.min ?? earliestLoggableDate(this.max);
     this.year = this.selected.year;
     this.month = this.selected.month;
   }
@@ -94,7 +101,7 @@ export class DatePickerModal extends Modal {
   private renderHeader(parent: HTMLElement): void {
     const header = parent.createDiv({ cls: "doms-calendar-header" });
 
-    this.arrow(header, "‹", "Previous month", -1);
+    this.prevEl = this.arrow(header, "‹", "Previous month", -1);
     this.labelEl = header.createDiv({ cls: "doms-calendar-label" });
     this.labelEl.setAttribute("role", "status");
     this.nextEl = this.arrow(header, "›", "Next month", 1);
@@ -114,7 +121,7 @@ export class DatePickerModal extends Modal {
     button.setAttribute("aria-label", label);
     button.addEventListener("click", () => {
       const next = shiftMonth(this.year, this.month, delta);
-      if (this.isFutureMonth(next.year, next.month)) return;
+      if (this.isOutOfRange(next.year, next.month)) return;
       this.year = next.year;
       this.month = next.month;
       this.paint();
@@ -126,6 +133,15 @@ export class DatePickerModal extends Modal {
     return year > this.max.year || (year === this.max.year && month > this.max.month);
   }
 
+  /** Before the backdate limit, so there is nothing pickable in it. */
+  private isPastMonth(year: number, month: number): boolean {
+    return year < this.min.year || (year === this.min.year && month < this.min.month);
+  }
+
+  private isOutOfRange(year: number, month: number): boolean {
+    return this.isFutureMonth(year, month) || this.isPastMonth(year, month);
+  }
+
   private paint(): void {
     const grid = this.gridEl;
     if (!grid) return;
@@ -135,7 +151,11 @@ export class DatePickerModal extends Modal {
 
     if (this.nextEl) {
       const next = shiftMonth(this.year, this.month, 1);
-      this.nextEl.disabled = this.isFutureMonth(next.year, next.month);
+      this.nextEl.disabled = this.isOutOfRange(next.year, next.month);
+    }
+    if (this.prevEl) {
+      const prev = shiftMonth(this.year, this.month, -1);
+      this.prevEl.disabled = this.isOutOfRange(prev.year, prev.month);
     }
 
     const lead = dayIndexInWeek(
@@ -157,8 +177,9 @@ export class DatePickerModal extends Modal {
       cell.type = "button";
       cell.setAttribute("aria-label", formatLongDate(date));
 
-      // A session you have not done yet is not a correction, it is a typo.
-      if (compareDates(date, this.max) > 0) {
+      // A session you have not done yet is not a correction, it is a typo — and
+      // past the backdate limit nobody remembers what they actually did.
+      if (compareDates(date, this.max) > 0 || compareDates(date, this.min) < 0) {
         cell.disabled = true;
         continue;
       }
@@ -174,7 +195,7 @@ export class DatePickerModal extends Modal {
   }
 
   private pick(date: CivilDate): void {
-    if (compareDates(date, this.max) > 0) return;
+    if (compareDates(date, this.max) > 0 || compareDates(date, this.min) < 0) return;
     this.selected = date;
     this.options.onPick(date);
     this.close();

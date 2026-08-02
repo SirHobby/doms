@@ -7,7 +7,7 @@ import {
   type CivilDate,
   type WeekDay,
 } from "../../data/dates";
-import { bonusTemplatesFor } from "../../data/plans";
+import { bonusTemplatesFor, loggableTemplates } from "../../data/plans";
 import {
   CARDIO_ACTIVITIES,
   DEFAULT_ACTIVITIES,
@@ -24,9 +24,12 @@ import { UndoToast } from "../../ui/undo-toast";
 import { ActivitySheet } from "../week/activity-sheet";
 import { BonusCard } from "../week/bonus-card";
 import { OtherCard } from "../week/other-card";
+import { PreviousCard } from "../week/previous-card";
 import { SessionSheet } from "../week/session-sheet";
 import { SlotCard } from "../week/slot-card";
 import { WeekSummary } from "../week/week-summary";
+import { WorkoutPicker } from "../week/workout-picker";
+import { DatePickerModal } from "../../ui/date-picker-modal";
 import { MotivationModal } from "../../ui/motivation-modal";
 import { DomsTab, type TabContext } from "./doms-tab";
 
@@ -133,9 +136,51 @@ export class WeekTab extends DomsTab {
         onOpen: () => this.showActivitySheet(),
       }),
     );
+
+    // Last on the page: a correction affordance, not a way to log today.
+    this.mount(
+      new PreviousCard(body, { onOpen: () => this.pickPreviousDate() }),
+    );
   }
 
-  private showActivitySheet(): void {
+  /**
+   * Step one of logging a previous workout: which day was it?
+   *
+   * The date comes first because it is what the user actually remembers — "I
+   * forgot to log Thursday" — and because it decides which week the session
+   * lands in, which is the whole point of the flow.
+   */
+  private pickPreviousDate(): void {
+    const { plugin } = this.context;
+
+    new DatePickerModal(plugin.app, {
+      selected: today(),
+      weekStart: plugin.settings.weekStart,
+      onPick: (date) => this.showWorkoutPicker(date),
+    }).open();
+  }
+
+  /** Step two: which workout was it? */
+  private showWorkoutPicker(date: CivilDate): void {
+    const body = this.resetBody();
+    if (!body) return;
+    this.showMotivate(false);
+
+    const { data } = this.context.plugin;
+
+    this.mount(
+      new WorkoutPicker(body, {
+        templates: loggableTemplates(data.plan, data.templates),
+        app: this.context.plugin.app,
+        weekStart: this.context.plugin.settings.weekStart,
+        date,
+        onBack: () => this.showWeek(),
+        onPick: (templateId, picked) => this.showSheet(templateId, picked),
+      }),
+    );
+  }
+
+  private showActivitySheet(date?: CivilDate): void {
     const body = this.resetBody();
     if (!body) return;
     this.showMotivate(false);
@@ -145,9 +190,10 @@ export class WeekTab extends DomsTab {
         title: "A different workout",
         activities: DEFAULT_ACTIVITIES,
         commitText: "Log it",
+        date,
         ...this.sheetChrome(),
-        onCommit: (activity, note, date) =>
-          this.commit(OTHER_TEMPLATE_ID, {}, note, date, activity),
+        onCommit: (activity, note, when) =>
+          this.commit(OTHER_TEMPLATE_ID, {}, note, when, activity),
       }),
     );
   }
@@ -162,7 +208,7 @@ export class WeekTab extends DomsTab {
     };
   }
 
-  private showSheet(templateId: string): void {
+  private showSheet(templateId: string, date?: CivilDate): void {
     const body = this.resetBody();
     if (!body) return;
     this.showMotivate(false);
@@ -170,6 +216,12 @@ export class WeekTab extends DomsTab {
     const template = findTemplate(templateId, this.context.plugin.data.templates);
     if (!template) {
       this.showWeek();
+      return;
+    }
+
+    // "A different workout" has its own sheet whichever route reaches it.
+    if (template.kind === "other") {
+      this.showActivitySheet(date);
       return;
     }
 
@@ -181,9 +233,10 @@ export class WeekTab extends DomsTab {
           title: template.name,
           activities: CARDIO_ACTIVITIES,
           commitText: "Log it",
+          date,
           ...this.sheetChrome(),
-          onCommit: (activity, note, date) =>
-            this.commit(templateId, {}, note, date, activity),
+          onCommit: (activity, note, when) =>
+            this.commit(templateId, {}, note, when, activity),
         }),
       );
       return;
@@ -192,9 +245,10 @@ export class WeekTab extends DomsTab {
     this.mount(
       new SessionSheet(body, {
         template,
+        date,
         ...this.sheetChrome(),
-        onCommit: (sets, note, date) =>
-          this.commit(templateId, sets, note, date),
+        onCommit: (sets, note, when) =>
+          this.commit(templateId, sets, note, when),
       }),
     );
   }

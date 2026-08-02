@@ -4,8 +4,8 @@ import {
   LATS_LOWER_BACK, MUSCLE_GROUPS, UPPER_BACK, findMuscle, isTracked,
   migrateSets, muscleSections, splitLegacyBack, trackedMuscles,
 } from "../src/data/muscles";
-import { PLANS, findPlan, bonusTemplatesFor, slotCount } from "../src/data/plans";
-import { parseIsoDate, weekKeyFor, formatIsoDate, addDays } from "../src/data/dates";
+import { PLANS, findPlan, bonusTemplatesFor, slotCount, loggableTemplates } from "../src/data/plans";
+import { parseIsoDate, weekKeyFor, formatIsoDate, addDays, BACKDATE_LIMIT_DAYS, earliestLoggableDate } from "../src/data/dates";
 import type { SessionRecord } from "../src/data/types";
 
 const OPTS = { weekStart: 1 as const, templates: DEFAULT_TEMPLATES, plan: findPlan("three-day") };
@@ -423,6 +423,47 @@ console.log("\n== this week's sets ==");
   // On PPL it is programmed, so it becomes a bar.
   const ppl = weeklySets([forearms], PPL, NOW);
   check("forearms is a bar on ppl", ppl.tracked.find((r) => r.muscle === "forearms")?.target, 12);
+}
+
+console.log("\n== logging a previous workout ==");
+{
+  // The picker offers the plan's own sessions first, then everything else,
+  // with repeats collapsed.
+  const three = loggableTemplates(findPlan("three-day"), DEFAULT_TEMPLATES);
+  check("plan sessions lead", three.slice(0, 3).map((t) => t.id), ["upper", "lower", "full"]);
+  check("everything is offered", three.length, DEFAULT_TEMPLATES.length);
+  check("no duplicates", three.length, new Set(three.map((t) => t.id)).size);
+
+  const ppl = loggableTemplates(findPlan("ppl"), DEFAULT_TEMPLATES);
+  check("ppl repeats collapse", ppl.slice(0, 4).map((t) => t.id), ["push", "pull", "legs", "cardio"]);
+  check("ppl offers everything once", ppl.length, DEFAULT_TEMPLATES.length);
+  check("a different workout is reachable", ppl.some((t) => t.id === "other"), true);
+}
+{
+  // Decision 4: thirty days back, and no further.
+  const from = parseIsoDate("2026-08-02")!;
+  check("backdate limit", BACKDATE_LIMIT_DAYS, 30);
+  check("earliest loggable", formatIsoDate(earliestLoggableDate(from)), "2026-07-03");
+}
+{
+  // Decision 5: a backdated session counts fully in the week it lands in.
+  // Last week is missing its full body day; logging it now completes that week.
+  const sessions = [
+    s("2026-07-20", "upper"), s("2026-07-22", "lower"),
+    ...week("2026-07-27"),
+  ];
+  const before = deriveWeekState(sessions, parseIsoDate("2026-07-24")!, OPTS);
+  check("last week incomplete before", before.complete, false);
+  check("streak counts this week only", computeStreaks(sessions, OPTS, NOW).current, 1);
+
+  const backdated = [...sessions, s("2026-07-24", "full")];
+  const after = deriveWeekState(backdated, parseIsoDate("2026-07-24")!, OPTS);
+  check("backdated session completes that week", after.complete, true);
+  check("it fills the slot, not the bonus", after.bonusSessions.length, 0);
+  // Two complete weeks back to back, so the streak follows.
+  check("streak extends to 2", computeStreaks(backdated, OPTS, NOW).current, 2);
+  // And it does not touch the current week's readout.
+  check("this week's sets unaffected", weeklySets(backdated, OPTS, NOW).tracked.every((r) => r.done === r.target), true);
 }
 
 console.log("\n== cumulative volume ==");

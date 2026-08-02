@@ -188,3 +188,16 @@ export function isWeekDay(value: unknown): value is WeekDay {
     typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 6
   );
 }
+
+/**
+ * How far back a session can be logged.
+ *
+ * Backdating exists to fix a session you forgot to log, not to reconstruct a
+ * training history from memory. Thirty days is well past the point where anyone
+ * still remembers what they actually did.
+ */
+export const BACKDATE_LIMIT_DAYS = 30;
+
+export function earliestLoggableDate(from: CivilDate = today()): CivilDate {
+  return addDays(from, -BACKDATE_LIMIT_DAYS);
+}

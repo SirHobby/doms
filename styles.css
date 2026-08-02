@@ -929,6 +929,28 @@
   gap: var(--doms-gap);
 }
 
+/* "Log a previous workout": last on the page and quieter than the cards above
+   it, because it corrects a past week rather than advancing this one. */
+
+.doms-view .doms-previous {
+  display: flex;
+  flex-direction: column;
+  gap: var(--doms-gap);
+}
+
+.doms-view .doms-previous .doms-bonus-card {
+  border-style: dashed;
+}
+
+/* The workout list on the way to logging a previous session. */
+
+.doms-view .doms-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--doms-gap);
+  margin-top: var(--doms-gap);
+}
+
 .doms-view .doms-chips {
   display: flex;
   flex-wrap: wrap;
