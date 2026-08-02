@@ -1,6 +1,7 @@
 import { Component, type App } from "obsidian";
 import { today, type CivilDate, type WeekDay } from "../../data/dates";
-import type { MuscleGroup, Template } from "../../data/templates";
+import { muscleLabel, type MuscleGroup } from "../../data/muscles";
+import type { Template } from "../../data/templates";
 import { sumSets } from "../../data/templates";
 import { SheetHeader } from "./sheet-header";
 import { Stepper } from "./stepper";
@@ -58,7 +59,7 @@ export class SessionSheet extends Component {
     for (const muscle of Object.keys(this.goals)) {
       this.addChild(
         new Stepper(list, {
-          label: muscle,
+          label: muscleLabel(muscle),
           value: 0,
           goal: this.goals[muscle],
           onChange: (value) => {

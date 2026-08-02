@@ -233,23 +233,32 @@ function week(mondayIso: string) {
 // Run with: npm run check
 
 // --- volume bands ---------------------------------------------------------
-import { deriveVolumeTargets, isWithinBand } from "../src/data/volume";
-console.log("\n== derived volume bands (spec §3 + absolute floor) ==");
+import { deriveVolumeTargets, trackedTargets } from "../src/data/volume";
+console.log("\n== derived volume targets (spec §3) ==");
 {
   const targets = deriveVolumeTargets(findPlan("three-day"), DEFAULT_TEMPLATES);
   const by = Object.fromEntries(targets.map((t) => [t.muscle, t]));
   check("quads target", by.quads.target, 8);
-  check("quads band", [by.quads.min, by.quads.max], [6.8, 9.2]);
-  // the case a pure percentage breaks on
   check("biceps target", by.biceps.target, 2);
-  check("biceps band widened by floor", [by.biceps.min, by.biceps.max], [1, 3]);
-  check("biceps 2 in band", isWithinBand(by.biceps, 2), true);
-  check("biceps 3 in band", isWithinBand(by.biceps, 3), true);
-  check("biceps 1 in band", isWithinBand(by.biceps, 1), true);
-  check("biceps 4 out of band", isWithinBand(by.biceps, 4), false);
-  check("quads 8 in band", isWithinBand(by.quads, 8), true);
-  check("quads 12 out of band", isWithinBand(by.quads, 12), false);
-  check("sorted by target desc", targets[0].muscle, "quads");
+  check("back split targets", [by[UPPER_BACK].target, by[LATS_LOWER_BACK].target], [4, 3]);
+  check("canonical order, push first", targets[0].muscle, "chest");
+
+  // Untracked groups are still derived; they just carry no goal downstream.
+  check("core is derived", by.core.target, 3);
+  check("core is not a tracked target", trackedTargets(findPlan("three-day"), DEFAULT_TEMPLATES).some((t) => t.muscle === "core"), false);
+
+  // PPL is the plan the targets were sized for.
+  const ppl = trackedTargets(findPlan("ppl"), DEFAULT_TEMPLATES);
+  check("ppl covers 11 tracked groups", ppl.length, 11);
+  check("ppl every group on 12", ppl.every((t) => t.target === 12), true);
+
+  // A zero-set offer on the rehab sheet is not an ask.
+  const rehabOnly = deriveVolumeTargets(
+    { id: "x", name: "x", description: "", slots: ["rehab"] },
+    DEFAULT_TEMPLATES,
+  );
+  check("zero-set offers excluded", rehabOnly.some((t) => t.muscle === "feet"), false);
+  check("non-zero rehab areas included", rehabOnly.find((t) => t.muscle === "rotator cuff")?.target, 3);
 }
 
 
@@ -307,7 +316,7 @@ console.log("\n== suggested next slot and full body nudge ==");
 
 
 // --- stats -----------------------------------------------------------------
-import { summarize, buildMonth, intensityLevel, weeklyHitRate, cumulativeVolume } from "../src/data/stats";
+import { summarize, buildMonth, intensityLevel, weeklySets, cumulativeVolume } from "../src/data/stats";
 import { shiftMonth } from "../src/data/dates";
 const NOW = parseIsoDate("2026-07-29")!;
 console.log("\n== stats summary ==");
@@ -372,28 +381,48 @@ console.log("\n== intensity buckets ==");
   check("19", intensityLevel(19), 4);
 }
 
-console.log("\n== weekly hit rate ==");
+console.log("\n== this week's sets ==");
 {
-  check("no sessions -> null rate", weeklyHitRate([], 12, OPTS, NOW)[0].rate, null);
+  const empty = weeklySets([], OPTS, NOW);
+  check("no sessions -> every tracked group at zero", empty.tracked.every((r) => r.done === 0), true);
+  check("tracked rows still render", empty.tracked.length, 10);
+  check("nothing extra", empty.extra, []);
 }
 {
-  // one perfect week, and it is the current week -> window starts there
-  const sessions = week("2026-07-27");
-  const rates = weeklyHitRate(sessions, 12, OPTS, NOW);
-  const by = Object.fromEntries(rates.map((r) => [r.muscle, r]));
-  check("only 1 week counted", by.quads.weeks, 1);
-  check("quads hit", by.quads.hit, 1);
-  check("quads rate", by.quads.rate, 1);
-  check("biceps hit (floor saves it)", by.biceps.hit, 1);
+  // A perfect three-day week fills every bar exactly.
+  const w = weeklySets(week("2026-07-27"), OPTS, NOW);
+  const by = Object.fromEntries(w.tracked.map((r) => [r.muscle, r]));
+  check("quads 8/8", [by.quads.done, by.quads.target], [8, 8]);
+  check("biceps 2/2", [by.biceps.done, by.biceps.target], [2, 2]);
+  check("upper back 4/4", [by[UPPER_BACK].done, by[UPPER_BACK].target], [4, 4]);
+  check("every bar full", w.tracked.every((r) => r.done === r.target), true);
+  // Core is logged but untracked, so it is a count, not a bar.
+  check("core is not a bar", w.tracked.some((r) => r.muscle === "core"), false);
+  check("core is an extra", w.extra.find((r) => r.muscle === "core")?.sets, 3);
+  check("extras carry a label", w.extra[0].label, "Core");
 }
 {
-  // two weeks tracked, only one complete
-  const sessions = [...week("2026-07-20"), s("2026-07-27", "upper")];
-  const rates = weeklyHitRate(sessions, 12, OPTS, NOW);
-  const by = Object.fromEntries(rates.map((r) => [r.muscle, r]));
-  check("2 weeks counted", by.quads.weeks, 2);
-  check("quads hit only the full week", by.quads.hit, 1);
-  check("quads rate", by.quads.rate, 0.5);
+  // Partial progress is the whole point: one upper day into the week.
+  const w = weeklySets([s("2026-07-27", "upper")], OPTS, NOW);
+  const by = Object.fromEntries(w.tracked.map((r) => [r.muscle, r]));
+  check("chest 4/7 partial", [by.chest.done, by.chest.target], [4, 7]);
+  check("quads 0/8 untouched", [by.quads.done, by.quads.target], [0, 8]);
+}
+{
+  // Last week's sessions do not bleed into this week's readout.
+  const w = weeklySets(week("2026-07-20"), OPTS, NOW);
+  check("previous week excluded", w.tracked.every((r) => r.done === 0), true);
+}
+{
+  // A tracked group logged on a plan that never programs it has no target, so
+  // it lands in the counts rather than inventing a denominator.
+  const forearms: SessionRecord = { ...s("2026-07-27", "upper"), sets: { forearms: 4 }, totalSets: 4 };
+  const w = weeklySets([forearms], OPTS, NOW);
+  check("forearms has no bar on three-day", w.tracked.some((r) => r.muscle === "forearms"), false);
+  check("forearms counted as extra", w.extra.find((r) => r.muscle === "forearms")?.sets, 4);
+  // On PPL it is programmed, so it becomes a bar.
+  const ppl = weeklySets([forearms], PPL, NOW);
+  check("forearms is a bar on ppl", ppl.tracked.find((r) => r.muscle === "forearms")?.target, 12);
 }
 
 console.log("\n== cumulative volume ==");

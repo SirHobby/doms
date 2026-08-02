@@ -44,7 +44,13 @@ export class Stepper extends Component {
     this.rowEl = row;
 
     const head = row.createDiv({ cls: "doms-stepper-head" });
-    const labelId = `doms-stepper-${this.options.label.replace(/\s+/g, "-")}`;
+    // Labels carry punctuation now ("Lats & lower back"), so strip anything
+    // that has no business in an id rather than emitting one and hoping.
+    const slug = this.options.label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    const labelId = `doms-stepper-${slug}`;
     head.createSpan({
       cls: "doms-stepper-label",
       text: this.options.label,

@@ -1,22 +1,20 @@
 import {
-  addDays,
   CivilDate,
-  compareDates,
   dayIndexInWeek,
   daysInMonth,
   formatIsoDate,
   monthLabel,
-  startOfWeek,
   today,
   weekdayLabels,
   weekKeyFor,
   WeekDay,
 } from "./dates";
 import type { Plan } from "./plans";
-import type { MuscleGroup, Template } from "./templates";
+import type { Template } from "./templates";
 import type { SessionRecord } from "./types";
+import { muscleLabel, muscleRank, type MuscleGroup } from "./muscles";
 import { computeStreaks, planForWeek } from "./week-state";
-import { deriveVolumeTargets, isWithinBand, type VolumeTarget } from "./volume";
+import { trackedTargets } from "./volume";
 
 export interface StatsOptions {
   weekStart: WeekDay;
@@ -148,95 +146,83 @@ export function buildMonth(
   };
 }
 
-export interface MuscleHitRate {
+/** One tracked body part's progress toward this week's derived target. */
+export interface WeeklySetRow {
   muscle: MuscleGroup;
-  /** Weeks where delivered volume landed inside the derived band. */
-  hit: number;
-  weeks: number;
-  /** 0-1, or null when there is nothing to measure yet. */
-  rate: number | null;
+  label: string;
+  done: number;
+  target: number;
+}
+
+/** A body part logged this week that carries no target. */
+export interface WeeklyExtraRow {
+  muscle: MuscleGroup;
+  label: string;
+  sets: number;
+}
+
+export interface WeeklySets {
+  weekKey: string;
+  /** Tracked body parts the week's plan asks for. Always rendered, even at zero. */
+  tracked: WeeklySetRow[];
+  /**
+   * Everything else that was actually logged: abs, rehab work, and any tracked
+   * group added as an extra on a plan that does not program it. Counts only,
+   * never a bar — there is no goal to be short of.
+   */
+  extra: WeeklyExtraRow[];
 }
 
 /**
- * How often each muscle's weekly volume landed inside its derived band, over
- * the trailing window (spec §4.4).
+ * Sets completed against the weekly target, per body part, for the current week.
  *
- * Weeks before the user's first session are excluded — otherwise installing the
- * plugin today would show a 0% hit rate for the previous eleven weeks. Weeks
- * after that first session *are* counted even if empty, because skipping a week
- * genuinely is a miss.
+ * This replaced a hit rate stat that was binary per muscle: you were inside the
+ * band or you were not, so every bar was empty or full and nothing moved when
+ * you logged a set. A proportion gives the page a reason to exist mid-week.
+ *
+ * The week is scored against the plan it was actually logged under, so switching
+ * routines does not retroactively change what this week was asking for.
  */
-export function weeklyHitRate(
+export function weeklySets(
   sessions: readonly SessionRecord[],
-  weekCount: number,
   options: StatsOptions,
   now: CivilDate = today(),
-): MuscleHitRate[] {
+): WeeklySets {
   const { weekStart, templates, plan } = options;
-  const targets = deriveVolumeTargets(plan, templates);
-  if (sessions.length === 0) {
-    return targets.map((t) => ({ muscle: t.muscle, hit: 0, weeks: 0, rate: null }));
-  }
+  const weekKey = weekKeyFor(now, weekStart);
 
-  const earliest = sessions.reduce<CivilDate>(
-    (min, s) => (compareDates(s.date, min) < 0 ? s.date : min),
-    sessions[0].date,
-  );
-  const firstTracked = startOfWeek(earliest, weekStart);
-
-  const volumeByWeek = new Map<string, Record<MuscleGroup, number>>();
+  const delivered: Record<MuscleGroup, number> = {};
   for (const session of sessions) {
-    let bucket = volumeByWeek.get(session.weekKey);
-    if (!bucket) {
-      bucket = {};
-      volumeByWeek.set(session.weekKey, bucket);
-    }
+    if (session.weekKey !== weekKey) continue;
     for (const [muscle, count] of Object.entries(session.sets)) {
-      bucket[muscle] = (bucket[muscle] ?? 0) + count;
+      delivered[muscle] = (delivered[muscle] ?? 0) + count;
     }
   }
 
-  const windowStart = addDays(startOfWeek(now, weekStart), -(weekCount - 1) * 7);
-  const counted: string[] = [];
-  for (let i = 0; i < weekCount; i++) {
-    const weekStartDate = addDays(windowStart, i * 7);
-    if (compareDates(weekStartDate, firstTracked) < 0) continue;
-    counted.push(weekKeyFor(weekStartDate, weekStart));
-  }
+  const weekPlan = planForWeek(weekKey, sessions, plan);
+  const targets = trackedTargets(weekPlan, templates);
 
-  // Each week is scored against the band its own plan implies, so a week run
-  // on push/pull/legs is not marked down for missing a three day target.
-  const targetsByWeek = new Map<string, Map<MuscleGroup, VolumeTarget>>();
-  for (const key of counted) {
-    const weekPlan = planForWeek(key, sessions, plan);
-    targetsByWeek.set(
-      key,
-      new Map(deriveVolumeTargets(weekPlan, templates).map((t) => [t.muscle, t])),
-    );
-  }
+  const tracked: WeeklySetRow[] = targets.map((t) => ({
+    muscle: t.muscle,
+    label: muscleLabel(t.muscle),
+    done: delivered[t.muscle] ?? 0,
+    target: t.target,
+  }));
 
-  return targets.map((target) => {
-    let hit = 0;
-    let weeks = 0;
-    for (const key of counted) {
-      // A muscle the week's plan never targeted is not counted against it.
-      const weekTarget = targetsByWeek.get(key)?.get(target.muscle);
-      if (!weekTarget) continue;
-      weeks++;
-      const delivered = volumeByWeek.get(key)?.[target.muscle] ?? 0;
-      if (isWithinBand(weekTarget, delivered)) hit++;
-    }
-    return {
-      muscle: target.muscle,
-      hit,
-      weeks,
-      rate: weeks > 0 ? hit / weeks : null,
-    };
-  });
+  // Anything logged that no bar accounts for. Rendering a row per untracked
+  // body part regardless would mean twenty empty rows saying nothing.
+  const targeted = new Set(targets.map((t) => t.muscle));
+  const extra: WeeklyExtraRow[] = Object.entries(delivered)
+    .filter(([muscle, sets]) => sets > 0 && !targeted.has(muscle))
+    .map(([muscle, sets]) => ({ muscle, label: muscleLabel(muscle), sets }))
+    .sort((a, b) => muscleRank(a.muscle) - muscleRank(b.muscle));
+
+  return { weekKey, tracked, extra };
 }
 
 export interface MuscleTotal {
   muscle: MuscleGroup;
+  label: string;
   sets: number;
 }
 
@@ -252,6 +238,6 @@ export function cumulativeVolume(
   }
 
   return Object.entries(totals)
-    .map(([muscle, sets]) => ({ muscle, sets }))
+    .map(([muscle, sets]) => ({ muscle, label: muscleLabel(muscle), sets }))
     .sort((a, b) => b.sets - a.sets || a.muscle.localeCompare(b.muscle));
 }

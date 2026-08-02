@@ -2,7 +2,7 @@ import { TAB_LABELS, TabId } from "../../constants";
 import {
   cumulativeVolume,
   summarize,
-  weeklyHitRate,
+  weeklySets,
   type StatsOptions,
 } from "../../data/stats";
 import type { SessionRecord } from "../../data/types";
@@ -11,9 +11,6 @@ import { BarList } from "../stats/bar-list";
 import { MonthCalendar } from "../stats/month-calendar";
 import { MetricCards } from "../stats/metric-cards";
 import { DomsTab, type TabContext } from "./doms-tab";
-
-/** Hit rate is always the trailing twelve weeks. */
-const HIT_RATE_WEEKS = 12;
 
 export class StatsTab extends DomsTab {
   readonly id: TabId = "stats";
@@ -42,7 +39,7 @@ export class StatsTab extends DomsTab {
     }
 
     this.renderActivity(body, sessions, options);
-    this.renderHitRate(body, sessions, options);
+    this.renderWeeklySets(body, sessions, options);
     this.renderVolume(body, sessions);
   }
 
@@ -55,30 +52,49 @@ export class StatsTab extends DomsTab {
     this.addChild(new MonthCalendar(body, { sessions, stats: options }));
   }
 
-  private renderHitRate(
+  private renderWeeklySets(
     body: HTMLElement,
     sessions: readonly SessionRecord[],
     options: StatsOptions,
   ): void {
     this.section(
       body,
-      "Weekly target hit rate",
-      "How often each muscle landed inside the band your plan implies. Diagnostic, not a goal.",
+      "This week's sets",
+      "Sets logged against what your routine asks for. Diagnostic, not a goal.",
     );
 
-    const rates = weeklyHitRate(sessions, HIT_RATE_WEEKS, options);
+    const week = weeklySets(sessions, options);
+
     this.addChild(
       new BarList(body, {
-        emptyText: "Not enough weeks logged yet.",
-        rows: rates
-          .filter((rate) => rate.rate !== null)
-          .map((rate) => ({
-            label: rate.muscle,
-            fraction: rate.rate ?? 0,
-            value: `${rate.hit} of ${rate.weeks}`,
-          })),
+        emptyText: "Nothing logged this week yet.",
+        rows: week.tracked.map((row) => ({
+          label: row.label,
+          fraction: row.target > 0 ? row.done / row.target : 0,
+          value: `${row.done} / ${row.target}`,
+        })),
       }),
     );
+
+    // Untracked work is real work and belongs on the page — just not with a
+    // denominator implying a goal was missed. Only rendered when there is some,
+    // so the page does not carry twenty empty rows saying nothing.
+    if (week.extra.length === 0) return;
+
+    body.createDiv({
+      cls: "doms-extra-note",
+      text: "Also logged this week, with no weekly target:",
+    });
+
+    const list = body.createDiv({ cls: "doms-extra-list" });
+    for (const row of week.extra) {
+      const item = list.createDiv({ cls: "doms-extra-row" });
+      item.createSpan({ cls: "doms-extra-label", text: row.label });
+      item.createSpan({
+        cls: "doms-extra-value",
+        text: `${row.sets} ${row.sets === 1 ? "set" : "sets"}`,
+      });
+    }
   }
 
   private renderVolume(
@@ -94,7 +110,7 @@ export class StatsTab extends DomsTab {
       new BarList(body, {
         emptyText: "Nothing logged yet.",
         rows: totals.map((total) => ({
-          label: total.muscle,
+          label: total.label,
           fraction: most > 0 ? total.sets / most : 0,
           value: `${total.sets}`,
         })),
