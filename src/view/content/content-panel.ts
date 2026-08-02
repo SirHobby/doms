@@ -27,13 +27,45 @@ export interface ContentPanelOptions {
  * a single row worked for seven categories and falls apart at nineteen.
  * Selection stays one tap either way.
  */
+/**
+ * Which groups were open, per category, for the lifetime of the app session.
+ *
+ * A tab switch discards the panel, so without this every trip back to Ideas
+ * would collapse everything the user had just opened. Deliberately not
+ * persisted to disk: writing it to settings would trigger a view rebuild on
+ * every tap, which costs far more than it buys.
+ */
+const sessionState = new Map<
+  ContentCategory,
+  { expanded: Set<string>; selected: string | null }
+>();
+
+function stateFor(category: ContentCategory) {
+  let state = sessionState.get(category);
+  if (!state) {
+    // Collapsed, nothing selected: the landing state is a short list of
+    // headings, not a wall of tabs.
+    state = { expanded: new Set<string>(), selected: null };
+    sessionState.set(category, state);
+  }
+  return state;
+}
+
 export class ContentPanel extends Component {
   private root: HTMLElement | null = null;
   private listEl: HTMLElement | null = null;
   private cards: Component[] = [];
   private notes: ContentNote[] = [];
-  private selected: string | null = null;
   private readonly chipEls = new Map<string, HTMLElement>();
+  private readonly state = stateFor(this.options.category);
+
+  private get selected(): string | null {
+    return this.state.selected;
+  }
+
+  private set selected(slug: string | null) {
+    this.state.selected = slug;
+  }
 
   constructor(
     private readonly parent: HTMLElement,
@@ -77,8 +109,10 @@ export class ContentPanel extends Component {
       this.renderStale(root);
     }
 
-    if (!this.notes.some((note) => note.slug === this.selected)) {
-      this.selected = this.notes[0].slug;
+    // A selection remembered from earlier in the session may name a note that
+    // has since been deleted or renamed.
+    if (this.selected && !this.notes.some((n) => n.slug === this.selected)) {
+      this.selected = null;
     }
 
     this.renderPicker(root);
@@ -86,15 +120,44 @@ export class ContentPanel extends Component {
     this.paintList();
   }
 
+  /**
+   * Collapsible groups, closed by default.
+   *
+   * Twenty-one categories rendered expanded is a wall of tabs that fills a
+   * phone screen before any content does. Five headings fit, and the one you
+   * want is one tap away rather than one scroll.
+   */
   private renderPicker(root: HTMLElement): void {
     const picker = root.createDiv({ cls: "doms-picker" });
 
     for (const group of groupNotes(this.notes)) {
-      picker.createDiv({ cls: "doms-picker-group", text: group.label });
+      const open = this.state.expanded.has(group.group);
+
+      const header = picker.createEl("button", { cls: "doms-picker-group" });
+      header.type = "button";
+      header.setAttribute("aria-expanded", String(open));
+      header.createSpan({ cls: "doms-picker-caret", text: "›" });
+      header.createSpan({ cls: "doms-picker-grouplabel", text: group.label });
+      header.createSpan({
+        cls: "doms-picker-groupcount",
+        text: String(group.notes.length),
+      });
 
       const grid = picker.createDiv({ cls: "doms-chips" });
       grid.setAttribute("role", "group");
       grid.setAttribute("aria-label", group.label);
+      grid.toggleClass("is-collapsed", !open);
+      header.toggleClass("is-open", open);
+
+      this.registerDomEvent(header, "click", () => {
+        const nowOpen = !this.state.expanded.has(group.group);
+        if (nowOpen) this.state.expanded.add(group.group);
+        else this.state.expanded.delete(group.group);
+
+        header.setAttribute("aria-expanded", String(nowOpen));
+        header.toggleClass("is-open", nowOpen);
+        grid.toggleClass("is-collapsed", !nowOpen);
+      });
 
       for (const note of group.notes) {
         const chip = grid.createEl("button", {
@@ -130,6 +193,16 @@ export class ContentPanel extends Component {
 
     this.clearCards();
     list.empty();
+
+    // Nothing picked yet, which is the landing state now that groups start
+    // closed. Say so rather than leaving the page apparently half-loaded.
+    if (!this.selected) {
+      list.createDiv({
+        cls: "doms-empty",
+        text: "Pick a group above to see what's in it.",
+      });
+      return;
+    }
 
     const note = this.notes.find((n) => n.slug === this.selected);
     if (!note) return;
