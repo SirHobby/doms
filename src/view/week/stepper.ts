@@ -7,6 +7,11 @@ export interface StepperOptions {
   goal?: number;
   min?: number;
   max?: number;
+  /**
+   * Present only on rows the user added themselves, which is what makes them
+   * removable — and what marks them as extra rather than part of the plan.
+   */
+  onRemove?: () => void;
   onChange: (value: number) => void;
 }
 
@@ -62,6 +67,19 @@ export class Stepper extends Component {
         cls: "doms-stepper-goal",
         text: `goal ${this.options.goal}`,
       });
+    }
+
+    // Added by hand, so it can be taken away by hand. Subtle rather than loud:
+    // an extra row is a normal row, it just was not on the plan.
+    if (this.options.onRemove) {
+      row.addClass("is-extra");
+      const remove = head.createEl("button", {
+        cls: "doms-stepper-remove",
+        text: "×",
+      });
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Remove ${this.options.label}`);
+      this.registerDomEvent(remove, "click", () => this.options.onRemove?.());
     }
 
     const controls = row.createDiv({ cls: "doms-stepper-controls" });

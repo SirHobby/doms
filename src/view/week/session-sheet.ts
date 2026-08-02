@@ -3,6 +3,7 @@ import { today, type CivilDate, type WeekDay } from "../../data/dates";
 import { muscleLabel, type MuscleGroup } from "../../data/muscles";
 import type { Template } from "../../data/templates";
 import { sumSets } from "../../data/templates";
+import { MusclePickerModal } from "../../ui/muscle-picker-modal";
 import { SheetHeader } from "./sheet-header";
 import { Stepper } from "./stepper";
 
@@ -39,6 +40,12 @@ export class SessionSheet extends Component {
   private header: SheetHeader | null = null;
   private committing = false;
 
+  /** Where added rows mount: before the "+" card, after the planned ones. */
+  private listEl: HTMLElement | null = null;
+  private addEl: HTMLElement | null = null;
+  /** Body parts the user added to this session, and their stepper. */
+  private readonly extras = new Map<MuscleGroup, Stepper>();
+
   constructor(
     private readonly parent: HTMLElement,
     private readonly options: SessionSheetOptions,
@@ -58,6 +65,8 @@ export class SessionSheet extends Component {
     this.renderHeader(root);
 
     const list = root.createDiv({ cls: "doms-sheet-list" });
+    this.listEl = list;
+
     for (const muscle of Object.keys(this.goals)) {
       this.addChild(
         new Stepper(list, {
@@ -72,11 +81,71 @@ export class SessionSheet extends Component {
       );
     }
 
+    this.renderAddCard(list);
+
     this.totalEl = root.createDiv({ cls: "doms-sheet-total" });
     this.paintTotal();
 
     this.renderNote(root);
     this.renderActions(root);
+  }
+
+  /**
+   * The "+" at the end of the list.
+   *
+   * Training something the session does not list is normal — abs after push
+   * day, a warmup, grip work — and without this there was nowhere to put it,
+   * so it either went unlogged or got mashed into an unrelated group.
+   */
+  private renderAddCard(list: HTMLElement): void {
+    const add = list.createEl("button", { cls: "doms-stepper-add" });
+    add.type = "button";
+    add.setText("+");
+    add.setAttribute("aria-label", "Add another body part");
+    this.addEl = add;
+
+    this.registerDomEvent(add, "click", () => {
+      new MusclePickerModal(this.options.app, {
+        // Everything already on the sheet, planned or added.
+        exclude: new Set(Object.keys(this.sets)),
+        onPick: (muscle) => this.addMuscle(muscle.id),
+      }).open();
+    });
+  }
+
+  private addMuscle(muscle: MuscleGroup): void {
+    if (muscle in this.sets || !this.listEl) return;
+
+    this.sets[muscle] = 0;
+
+    // No goal: the plan never asked for this, so there is nothing to be short
+    // of. It still counts toward the weekly bar if the group is a tracked one.
+    const stepper = new Stepper(this.listEl, {
+      label: muscleLabel(muscle),
+      value: 0,
+      onRemove: () => this.removeMuscle(muscle),
+      onChange: (value) => {
+        this.sets[muscle] = value;
+        this.paintTotal();
+      },
+    });
+    this.addChild(stepper);
+    this.extras.set(muscle, stepper);
+
+    // Keep the "+" last, so the list always ends with the way to extend it.
+    if (this.addEl) this.listEl.appendChild(this.addEl);
+
+    this.paintTotal();
+  }
+
+  private removeMuscle(muscle: MuscleGroup): void {
+    const stepper = this.extras.get(muscle);
+    if (!stepper) return;
+
+    this.removeChild(stepper);
+    this.extras.delete(muscle);
+    delete this.sets[muscle];
+    this.paintTotal();
   }
 
   private renderHeader(root: HTMLElement): void {

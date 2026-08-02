@@ -425,6 +425,33 @@ console.log("\n== this week's sets ==");
   check("forearms is a bar on ppl", ppl.tracked.find((r) => r.muscle === "forearms")?.target, 12);
 }
 
+console.log("\n== extra body parts added while logging ==");
+{
+  // Abs after push day: recorded, surfaced, no goal attached.
+  const push: SessionRecord = {
+    ...s("2026-07-27", "push"),
+    sets: { chest: 6, shoulders: 6, triceps: 6, core: 4 },
+    totalSets: 22,
+  };
+  const w = weeklySets([push], PPL, NOW);
+  check("abs are not a bar", w.tracked.some((r) => r.muscle === "core"), false);
+  check("abs are counted", w.extra.find((r) => r.muscle === "core")?.sets, 4);
+  check("abs show all time", cumulativeVolume([push]).find((t) => t.muscle === "core")?.sets, 4);
+}
+{
+  // Forearms on leg day, on a plan that programs forearms: the bar moves.
+  const legs: SessionRecord = {
+    ...s("2026-07-27", "legs"),
+    sets: { quads: 6, hamstrings: 6, glutes: 6, calves: 6, forearms: 3 },
+    totalSets: 27,
+  };
+  const w = weeklySets([legs], PPL, NOW);
+  const forearms = w.tracked.find((r) => r.muscle === "forearms");
+  check("forearms bar exists", forearms?.target, 12);
+  check("forearms bar moved", forearms?.done, 3);
+  check("forearms is not an extra", w.extra.some((r) => r.muscle === "forearms"), false);
+}
+
 console.log("\n== logging a previous workout ==");
 {
   // The picker offers the plan's own sessions first, then everything else,
