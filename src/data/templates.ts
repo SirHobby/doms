@@ -1,47 +1,31 @@
 /** Default plan data from spec §3. Templates are data, editable later. */
 
+import {
+  LATS_LOWER_BACK,
+  MUSCLE_GROUPS,
+  UPPER_BACK,
+  type MuscleGroup,
+} from "./muscles";
+
+export type { MuscleGroup };
+
 /**
- * Areas trained on a rehab day. Separate from the main muscle groups on purpose:
- * they are stabilisers, and mixing them into the volume readout would distort it.
+ * Areas offered on a rehab day: everything the canonical list marks as rehab or
+ * accessory work, plus the two leg groups that genuinely get rehabbed.
  *
- * The rehab template lists all of them, but most default to zero sets. A rehab
- * day is pick-and-choose — you do the two or three things that feel off, not the
- * whole list — and zero-set entries are dropped at commit, so the sheet can
- * offer everything without inflating what gets logged.
+ * A rehab day is pick-and-choose — you do the two or three things that feel off,
+ * not the whole list — so most of these default to zero sets. Zero-set entries
+ * are dropped at commit, which is what lets the sheet offer everything without
+ * inflating what gets logged.
  */
-export const REHAB_AREAS = [
-  "rotator cuff",
-  "shoulder blades",
-  "neck",
-  "thoracic spine",
-  "wrists",
-  "elbows",
-  "deep core",
-  "lower back",
-  "hips",
-  "hip flexors",
-  "knees",
+export const REHAB_AREAS: readonly MuscleGroup[] = [
+  ...MUSCLE_GROUPS.filter((m) => m.section === "rehab").map((m) => m.id),
+  // Tracked leg groups, offered here too: a rehabbed hamstring or achilles is
+  // still hamstring and calf work, so it counts toward those weekly bars rather
+  // than becoming a shadow group that means the same thing.
   "hamstrings",
   "calves",
-  "ankles",
-  "feet",
-  "balance",
-] as const;
-
-export const DEFAULT_MUSCLE_GROUPS = [
-  "chest",
-  "back",
-  "shoulders",
-  "biceps",
-  "triceps",
-  "quads",
-  "hamstrings",
-  "glutes",
-  "calves",
-  "core",
-] as const;
-
-export type MuscleGroup = string;
+];
 
 /**
  * What a template is, not what role it plays — the active plan decides which
@@ -62,11 +46,27 @@ export interface Template {
 }
 
 export const DEFAULT_TEMPLATES: readonly Template[] = [
+  // The three-day templates keep the set counts they have always had. Their
+  // session totals are already about right at 16-17 sets, and the weekly target
+  // for each muscle is derived from whatever the plan delivers, so there is
+  // nothing here to normalize upward.
+  //
+  // The only change is the back split, applied in place: the old single `back`
+  // number is halved across the two groups that replaced it, odd set to upper
+  // back. Session totals are unchanged.
   {
     id: "upper",
     name: "Upper body",
     kind: "strength",
-    sets: { chest: 4, back: 4, shoulders: 3, biceps: 2, triceps: 2, core: 1 },
+    sets: {
+      chest: 4,
+      [UPPER_BACK]: 2,
+      [LATS_LOWER_BACK]: 2,
+      shoulders: 3,
+      biceps: 2,
+      triceps: 2,
+      core: 1,
+    },
   },
   {
     id: "lower",
@@ -80,7 +80,8 @@ export const DEFAULT_TEMPLATES: readonly Template[] = [
     kind: "strength",
     sets: {
       chest: 3,
-      back: 3,
+      [UPPER_BACK]: 2,
+      [LATS_LOWER_BACK]: 1,
       shoulders: 2,
       quads: 3,
       hamstrings: 2,
@@ -88,23 +89,36 @@ export const DEFAULT_TEMPLATES: readonly Template[] = [
       core: 2,
     },
   },
+
+  // Push, pull and legs are sized so that two exposures a week land every
+  // tracked group on twelve sets. Six gym days previously delivered eight to
+  // twelve sets per muscle, which is less than the three-day plan asks of some
+  // groups — a lot of time in the gym for volume that did not reflect it.
   {
     id: "push",
     name: "Push",
     kind: "strength",
-    sets: { chest: 5, shoulders: 4, triceps: 4 },
+    sets: { chest: 6, shoulders: 6, triceps: 6 },
   },
   {
     id: "pull",
     name: "Pull",
     kind: "strength",
-    sets: { back: 6, biceps: 4, shoulders: 2 },
+    // Shoulders is gone: it was standing in for upper back work, which now has
+    // its own group. Forearms and grip get trained on pull day in practice, so
+    // they are on the sheet rather than left to be remembered.
+    sets: {
+      [UPPER_BACK]: 6,
+      [LATS_LOWER_BACK]: 6,
+      biceps: 6,
+      forearms: 6,
+    },
   },
   {
     id: "legs",
     name: "Legs",
     kind: "strength",
-    sets: { quads: 5, hamstrings: 4, glutes: 4, calves: 4 },
+    sets: { quads: 6, hamstrings: 6, glutes: 6, calves: 6 },
   },
   {
     id: "rehab",

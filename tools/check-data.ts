@@ -1,5 +1,9 @@
 import { deriveWeekState, computeStreaks } from "../src/data/week-state";
 import { DEFAULT_TEMPLATES, REHAB_AREAS } from "../src/data/templates";
+import {
+  LATS_LOWER_BACK, MUSCLE_GROUPS, UPPER_BACK, findMuscle, isTracked,
+  migrateSets, muscleSections, splitLegacyBack, trackedMuscles,
+} from "../src/data/muscles";
 import { PLANS, findPlan, bonusTemplatesFor, slotCount } from "../src/data/plans";
 import { parseIsoDate, weekKeyFor, formatIsoDate, addDays } from "../src/data/dates";
 import type { SessionRecord } from "../src/data/types";
@@ -39,8 +43,72 @@ function other(iso: string, activity: string): SessionRecord {
   };
 }
 
+// --- canonical body part list ---------------------------------------------
+console.log("== canonical muscle group list ==");
+{
+  const ids = MUSCLE_GROUPS.map((m) => m.id);
+  check("no duplicate ids", ids.length, new Set(ids).size);
+  check("tracked count", trackedMuscles().length, 11);
+  check("forearms present", findMuscle("forearms")?.tracked, true);
+  check("back is gone", findMuscle("back"), null);
+  check("both back groups tracked", [
+    findMuscle(UPPER_BACK)?.tracked,
+    findMuscle(LATS_LOWER_BACK)?.tracked,
+  ], [true, true]);
+  check("core is untracked", findMuscle("core")?.tracked, false);
+  check("rehab work is untracked", findMuscle("rotator cuff")?.tracked, false);
+  check("unknown ids are untracked", isTracked("nonsense"), false);
+
+  // Every set count any template declares has to name a real body part, or the
+  // sheet would render a row nothing else in the app knows about.
+  const unknown: string[] = [];
+  for (const t of DEFAULT_TEMPLATES) {
+    for (const m of Object.keys(t.sets)) if (!findMuscle(m)) unknown.push(`${t.id}/${m}`);
+  }
+  check("every template key is on the list", unknown, []);
+
+  // The picker offers everything, minus what is already on the sheet.
+  const sections = muscleSections(new Set(["chest", "quads"]));
+  const offered = sections.flatMap((g) => g.muscles.map((m) => m.id));
+  check("picker excludes what is present", offered.includes("chest"), false);
+  check("picker offers the rest", offered.length, MUSCLE_GROUPS.length - 2);
+  check("picker leads with push", sections[0].section, "push");
+  check("picker ends with rehab", sections[sections.length - 1].section, "rehab");
+}
+
+console.log("\n== legacy `back` migration ==");
+{
+  check("even split", splitLegacyBack(10), { [UPPER_BACK]: 5, [LATS_LOWER_BACK]: 5 });
+  // Odd set goes to upper back.
+  check("odd split", splitLegacyBack(7), { [UPPER_BACK]: 4, [LATS_LOWER_BACK]: 3 });
+  check("one set", splitLegacyBack(1), { [UPPER_BACK]: 1, [LATS_LOWER_BACK]: 0 });
+
+  // The guarantee that matters: historical totals must not move.
+  for (const n of [1, 2, 3, 6, 7, 10, 13]) {
+    const split = splitLegacyBack(n);
+    check(`  total preserved for ${n}`, split[UPPER_BACK] + split[LATS_LOWER_BACK], n);
+  }
+
+  const migrated = migrateSets({ chest: 4, back: 7, biceps: 2 });
+  check("back key removed", migrated.back, undefined);
+  check("other groups untouched", [migrated.chest, migrated.biceps], [4, 2]);
+  check("split applied", [migrated[UPPER_BACK], migrated[LATS_LOWER_BACK]], [4, 3]);
+  check(
+    "session total preserved",
+    Object.values(migrated).reduce((a, b) => a + b, 0),
+    13,
+  );
+
+  // A note already using the new keys is left exactly as it is.
+  const already = { [UPPER_BACK]: 3, [LATS_LOWER_BACK]: 3 };
+  check("no legacy key is a no-op", migrateSets(already), already);
+  // And one carrying both ends up with the sum rather than losing either.
+  const both = migrateSets({ back: 4, [UPPER_BACK]: 1 });
+  check("mixed keys add up", [both[UPPER_BACK], both[LATS_LOWER_BACK]], [3, 2]);
+}
+
 // --- week state -----------------------------------------------------------
-console.log("== week state, mid week, 1 of 3 done ==");
+console.log("\n== week state, mid week, 1 of 3 done ==");
 {
   const sessions = [s("2026-07-27", "upper")];
   const w = deriveWeekState(sessions, parseIsoDate("2026-07-29")!, OPTS);
@@ -79,8 +147,9 @@ console.log("\n== full week + a bonus session ==");
   check("bonus count", w.bonusSessions.length, 1);
   check("daysLeft on last day", w.daysLeft, 1);
   // spec §3: three required sessions deliver chest 7, back 7, quads 8 ...
-  check("chest (3 required + push 5)", w.volume.chest, 12);
-  check("back", w.volume.back, 7);
+  check("chest (3 required + push 6)", w.volume.chest, 13);
+  // Back is two groups now. The sum is what has to stay put.
+  check("back total", w.volume["upper back"] + w.volume["lats and lower back"], 7);
   check("quads", w.volume.quads, 8);
 }
 
@@ -88,8 +157,13 @@ console.log("\n== spec §3 derived volume from a perfect required week ==");
 {
   const sessions = [s("2026-07-27","upper"), s("2026-07-29","lower"), s("2026-07-31","full")];
   const w = deriveWeekState(sessions, parseIsoDate("2026-07-31")!, OPTS);
-  const want = { chest:7, back:7, shoulders:5, quads:8, hamstrings:6, glutes:6, calves:3, core:3, biceps:2, triceps:2 };
+  const want = {
+    chest:7, "upper back":4, "lats and lower back":3, shoulders:5,
+    quads:8, hamstrings:6, glutes:6, calves:3, core:3, biceps:2, triceps:2,
+  };
   for (const [m, v] of Object.entries(want)) check(`  ${m}`, w.volume[m], v);
+  // The split must not change what a perfect week delivers in total.
+  check("  week total unchanged", w.totalSets, 49);
 }
 
 // --- streaks --------------------------------------------------------------
@@ -327,7 +401,7 @@ console.log("\n== cumulative volume ==");
   const sessions = [...week("2026-07-20"), s("2026-07-27", "push")];
   const totals = cumulativeVolume(sessions);
   const by = Object.fromEntries(totals.map((t) => [t.muscle, t.sets]));
-  check("chest 7 + push 5", by.chest, 12);
+  check("chest 7 + push 6", by.chest, 13);
   check("calves", by.calves, 3);
   check("sorted desc", totals[0].sets >= totals[1].sets, true);
   check("empty", cumulativeVolume([]), []);

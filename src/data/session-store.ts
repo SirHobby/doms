@@ -8,8 +8,8 @@ import {
   weekKeyFor,
   WeekDay,
 } from "./dates";
+import { migrateSets, type MuscleGroup } from "./muscles";
 import { contentFolder, ideasFolder, logFolder, rehabFolder, sessionPath } from "./paths";
-import type { MuscleGroup } from "./templates";
 import type { CommitInput, SessionRecord, SlotKind } from "./types";
 import { markdownFilesIn } from "./vault-files";
 
@@ -92,8 +92,14 @@ export class SessionStore {
     const templateId = typeof fm.template === "string" ? fm.template : null;
     if (!templateId) return null;
 
-    const sets = parseSets(fm.sets);
-    if (!sets) return null;
+    const parsed = parseSets(fm.sets);
+    if (!parsed) return null;
+
+    // Sessions logged before `back` was split in two still say `back`.
+    // Translating on read rather than rewriting notes means nothing on disk is
+    // touched, the split applies the moment the plugin updates, and all time
+    // back volume comes out to exactly the same number it did before.
+    const sets = migrateSets(parsed);
 
     const slot: SlotKind =
       fm.slot === "bonus" ? "bonus" : fm.slot === "other" ? "other" : "required";
