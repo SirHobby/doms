@@ -10,11 +10,13 @@ Your training history is plain markdown in your own vault. If this plugin disapp
 
 ## What it does
 
-**Week** — your routine as a set of slots. Tap one, count your sets as you go, log it. One tap logs the whole session as planned if you did exactly that. Forgot to log yesterday? Every logging screen carries a date, so you can put the session on the day it actually happened.
+**Week** — your routine as a set of slots. Tap one, count your sets as you go, log it. One tap logs the whole session as planned if you did exactly that. Trained something the session doesn't list? Tap **+** to add any body part — abs after push day, grip work, whatever it was — and it logs like the rest.
 
-**Stats** — sessions, current and best week streak, total sets, a month-by-month activity calendar, and per-muscle coverage over the last twelve weeks.
+Forgot yesterday? Every logging screen carries a date, so you can put the session on the day it actually happened. For a week that has already closed, **Log a previous workout** at the bottom of the Week tab asks for the day first, then the workout. Backdating reaches 30 days, and a backdated session counts fully toward that week's totals, completion and streak.
 
-**Ideas** — a browsable exercise library across 20 categories, with technique videos.
+**Stats** — sessions, current and best week streak, total sets, a month-by-month activity calendar, and **this week's sets** for each body part against what your routine asks of it, as a bar you can watch move.
+
+**Ideas** — a browsable exercise library across 20 categories, with technique videos. Grouped and collapsed by default, so it opens as a short list rather than a wall of tabs.
 
 **Rehab** — physio-style strengthening for the small stabilising muscles that heavy lifts under-train. Rotator cuff, shoulder blades, hips, ankles, feet, wrists and more.
 
@@ -22,13 +24,15 @@ Your training history is plain markdown in your own vault. If this plugin disapp
 
 ## Choose your routine
 
-| Routine | Week |
-| --- | --- |
-| **Three days a week** *(default)* | Upper · Lower · Full body |
-| **Upper / lower, five days** | Upper ×2 · Lower ×2 · Cardio |
-| **Push / pull / legs, seven days** | Push ×2 · Pull ×2 · Legs ×2 · Cardio |
+| Routine | Week | Sets |
+| --- | --- | --- |
+| **Three days a week** *(default)* | Upper · Lower · Full body | ~49 |
+| **Upper / lower, five days** | Upper ×2 · Lower ×2 · Cardio | ~64 |
+| **Push / pull / legs, seven days** | Push ×2 · Pull ×2 · Legs ×2 · Cardio | ~132 |
 
-Weekly volume targets are **derived from whichever routine you pick**, never hardcoded, so a perfectly executed week never reads as a failure.
+Weekly volume targets are **derived from whichever routine you pick**, never hardcoded, so a perfectly executed week never reads as a failure. Push / pull / legs is sized so every tracked body part lands on twelve sets a week — six gym days should deliver more than three.
+
+Body parts that carry a target are the ones a routine is built around. Abs and rehab work don't: they're logged and counted the same way, and show up in your stats as sets done, but no bar ever tells you that you owe rotator cuff work.
 
 Each session records the routine you were following at the time, so switching later leaves your past weeks judged by what you actually did.
 
