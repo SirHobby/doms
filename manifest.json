@@ -1,7 +1,7 @@
 {
   "id": "doms",
   "name": "D.O.M.S",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "minAppVersion": "1.7.2",
   "description": "doms is an opinionated, mobile-first workout tracker, logger and reference. Pick a routine, log a session in one tap, and keep the data as plain markdown.",
   "author": "SirHobby",
