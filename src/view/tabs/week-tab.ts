@@ -8,11 +8,7 @@ import {
   type CivilDate,
   type WeekDay,
 } from "../../data/dates";
-import {
-  bonusTemplatesFor,
-  isCustomPlan,
-  loggableTemplates,
-} from "../../data/plans";
+import { bonusTemplatesFor, isCustomPlan } from "../../data/plans";
 import {
   CARDIO_ACTIVITIES,
   CUSTOM_TEMPLATE_ID,
@@ -22,6 +18,7 @@ import {
   type MuscleGroup,
 } from "../../data/templates";
 import { draftTotal, type SessionDraft } from "../../data/drafts";
+import { makeDayId } from "../../data/custom-days";
 import { orderSlots, suggestNext } from "../../data/suggest";
 import type { SessionRecord, StreakState, WeekState } from "../../data/types";
 import { sessionLabel } from "../../data/week-state";
@@ -32,12 +29,13 @@ import { ConfirmModal } from "../../ui/confirm-modal";
 import { UndoToast } from "../../ui/undo-toast";
 import { ActivitySheet } from "../week/activity-sheet";
 import { BonusCard } from "../week/bonus-card";
-import { CustomCard } from "../week/custom-card";
+import { CreateDayCard, CustomCard } from "../week/custom-card";
+import { CreateDaySheet } from "../week/create-day-sheet";
+import { DayCard } from "../week/day-card";
 import { OtherCard } from "../week/other-card";
 import { SessionSheet } from "../week/session-sheet";
 import { SlotCard } from "../week/slot-card";
 import { WeekSummary } from "../week/week-summary";
-import { WorkoutPicker } from "../week/workout-picker";
 import { MotivationModal } from "../../ui/motivation-modal";
 import { DomsTab, type TabContext } from "./doms-tab";
 
@@ -193,7 +191,55 @@ export class WeekTab extends DomsTab {
       );
     }
 
+    // The user's own days: tap to log one, exactly like a prescribed slot.
+    for (const day of data.customDays) {
+      this.mount(
+        new DayCard(body, {
+          day,
+          draft: this.draftFor(day.id),
+          onOpen: (templateId) => this.showSheet(templateId),
+          onDiscard: (draft) => this.confirmDiscard(draft),
+        }),
+      );
+    }
+
     this.mount(this.customCard(body));
+    this.mount(
+      new CreateDayCard(body, { onOpen: () => this.showCreateDay() }),
+    );
+  }
+
+  /** Building a reusable day. Custom routine only — nothing else has a gap. */
+  private showCreateDay(): void {
+    const body = this.resetBody();
+    if (!body) return;
+    this.showMotivate(false);
+
+    const { plugin } = this.context;
+
+    this.mount(
+      new CreateDaySheet(body, {
+        app: plugin.app,
+        existing: plugin.data.customDays,
+        onBack: () => this.showWeek(),
+        onCreate: async (name, sets) => {
+          const taken = new Set(plugin.data.templates.map((t) => t.id));
+          plugin.settings.customDays = [
+            ...plugin.settings.customDays,
+            { id: makeDayId(name, taken), name, sets },
+          ];
+          await plugin.persistSettings();
+          this.showWeek();
+        },
+        onRemove: async (day) => {
+          plugin.settings.customDays = plugin.settings.customDays.filter(
+            (d) => d.id !== day.id,
+          );
+          await plugin.persistSettings();
+          this.showCreateDay();
+        },
+      }),
+    );
   }
 
   private customCard(body: HTMLElement): CustomCard {
@@ -238,28 +284,6 @@ export class WeekTab extends DomsTab {
       confirmText: "Discard",
       onConfirm: drop,
     }).open();
-  }
-
-  /** Step two of the old previous-workout flow: which routine was it? */
-  private showWorkoutPicker(date: CivilDate): void {
-    const body = this.resetBody();
-    if (!body) return;
-    this.showMotivate(false);
-
-    const { data } = this.context.plugin;
-
-    this.mount(
-      new WorkoutPicker(body, {
-        templates: loggableTemplates(data.plan, data.templates).filter(
-          (t) => t.id !== CUSTOM_TEMPLATE_ID,
-        ),
-        app: this.context.plugin.app,
-        weekStart: this.context.plugin.settings.weekStart,
-        date,
-        onBack: () => this.showCustomSheet(),
-        onPick: (templateId, picked) => this.showSheet(templateId, picked),
-      }),
-    );
   }
 
   /** The build-it-yourself sheet: no prescribed rows, add what you trained. */
@@ -367,19 +391,6 @@ export class WeekTab extends DomsTab {
           this.commit(templateId, sets, note, when),
       }),
     );
-
-    // On the custom sheet only: a quiet way back to logging a prescribed
-    // routine, which is what the old previous-workout flow was for.
-    if (templateId === CUSTOM_TEMPLATE_ID) {
-      const link = body.createEl("button", {
-        cls: "doms-sheet-alt",
-        text: "Log one of my routines instead",
-      });
-      link.type = "button";
-      this.registerDomEvent(link, "click", () =>
-        this.showWorkoutPicker(date ?? today()),
-      );
-    }
   }
 
   private async commit(

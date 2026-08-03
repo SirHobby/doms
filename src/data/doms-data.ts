@@ -2,6 +2,7 @@ import { App } from "obsidian";
 import { CivilDate, today, WeekDay } from "./dates";
 import { SessionStore } from "./session-store";
 import { clampCustomSessions, findPlan, type Plan } from "./plans";
+import { dayTemplate, type CustomDay } from "./custom-days";
 import { DEFAULT_TEMPLATES, Template } from "./templates";
 import type { CommitInput, SessionRecord, StreakState, WeekState } from "./types";
 import {
@@ -16,6 +17,8 @@ export interface DataConfig {
   planId: string;
   /** The weekly bar on the custom plan. Ignored by every other plan. */
   customSessions: number;
+  /** Days the user built on the custom plan. */
+  customDays: readonly CustomDay[];
 }
 
 /**
@@ -36,8 +39,22 @@ export class DomsData {
     this.store = new SessionStore(app, config);
   }
 
+  /**
+   * The built-in templates plus whatever days the user has created.
+   *
+   * Created days are always in this list, even on a prescribed routine, so a
+   * session logged under one still resolves its name after switching plans.
+   * What keeps them off other routines is the `userDefined` flag, not absence.
+   */
   get templates(): readonly Template[] {
-    return DEFAULT_TEMPLATES;
+    const days = this.config().customDays;
+    if (days.length === 0) return DEFAULT_TEMPLATES;
+    return [...DEFAULT_TEMPLATES, ...days.map(dayTemplate)];
+  }
+
+  /** The user's created days, in the order they made them. */
+  get customDays(): readonly CustomDay[] {
+    return this.config().customDays;
   }
 
   get plan(): Plan {

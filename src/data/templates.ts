@@ -78,6 +78,12 @@ export interface Template {
   kind: TemplateKind;
   /** muscle group -> suggested set count */
   sets: Record<MuscleGroup, number>;
+  /**
+   * A day the user built on the custom routine. Kept out of the bonus offers on
+   * prescribed plans: it belongs to the routine it was created under, not to
+   * every routine.
+   */
+  userDefined?: boolean;
 }
 
 export const DEFAULT_TEMPLATES: readonly Template[] = [

@@ -1,6 +1,7 @@
 import { Platform } from "obsidian";
 import { DEFAULT_WEEK_START, isWeekDay, WeekDay } from "../data/dates";
 import { DEFAULT_ROOT_FOLDER, normalizeRoot } from "../data/paths";
+import { normalizeCustomDays, type CustomDay } from "../data/custom-days";
 import {
   clampCustomSessions,
   DEFAULT_CUSTOM_SESSIONS,
@@ -74,6 +75,11 @@ export interface DomsSettings {
    * rather than reset, because it is a preference, not plan state.
    */
   customSessions: number;
+  /**
+   * Days built on the custom routine. Offered as one tap workouts there, and
+   * kept when you switch away so switching back does not lose them.
+   */
+  customDays: CustomDay[];
 
   /** Celebration */
   celebrationMode: CelebrationMode;
@@ -90,6 +96,7 @@ export const DEFAULT_SETTINGS: DomsSettings = {
   planId: DEFAULT_PLAN_ID,
   weekStart: DEFAULT_WEEK_START,
   customSessions: DEFAULT_CUSTOM_SESSIONS,
+  customDays: [],
   celebrationMode: "animation",
   celebrationFolder: "",
   rootFolder: DEFAULT_ROOT_FOLDER,
@@ -134,6 +141,7 @@ export function normalizeSettings(raw: unknown): DomsSettings {
       ? data.weekStart
       : DEFAULT_SETTINGS.weekStart,
     customSessions: clampCustomSessions(data.customSessions),
+    customDays: normalizeCustomDays(data.customDays),
     celebrationMode:
       data.celebrationMode === "folder" ? "folder" : "animation",
     celebrationFolder:

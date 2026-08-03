@@ -57,7 +57,6 @@ export class SessionSheet extends Component {
   /** Where added rows mount: before the "+" card, after the planned ones. */
   private listEl: HTMLElement | null = null;
   private addEl: HTMLElement | null = null;
-  private emptyEl: HTMLElement | null = null;
   /** Body parts the user added to this session, and their stepper. */
   private readonly extras = new Map<MuscleGroup, Stepper>();
 
@@ -121,7 +120,6 @@ export class SessionSheet extends Component {
       );
     }
 
-    this.renderEmpty(list);
     this.renderAddCard(list);
 
     for (const muscle of Object.keys(this.sets)) {
@@ -133,19 +131,6 @@ export class SessionSheet extends Component {
     this.renderNote(root);
     this.renderActions(root);
     this.paintTotal();
-  }
-
-  /**
-   * The custom sheet opens with nothing on it, which without a word of
-   * explanation reads as a broken screen rather than an invitation.
-   */
-  private renderEmpty(list: HTMLElement): void {
-    if (!this.isCustom) return;
-
-    this.emptyEl = list.createDiv({
-      cls: "doms-sheet-empty",
-      text: "Add the body parts you trained.",
-    });
   }
 
   /**
@@ -199,7 +184,6 @@ export class SessionSheet extends Component {
 
     // Keep the "+" last, so the list always ends with the way to extend it.
     if (this.addEl) this.listEl.appendChild(this.addEl);
-    this.paintEmpty();
   }
 
   private removeMuscle(muscle: MuscleGroup): void {
@@ -209,12 +193,7 @@ export class SessionSheet extends Component {
     this.removeChild(stepper);
     this.extras.delete(muscle);
     delete this.sets[muscle];
-    this.paintEmpty();
     this.onChanged();
-  }
-
-  private paintEmpty(): void {
-    this.emptyEl?.toggleClass("is-hidden", Object.keys(this.sets).length > 0);
   }
 
   private renderHeader(root: HTMLElement): void {

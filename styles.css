@@ -571,34 +571,6 @@
   }
 }
 
-/* The custom sheet opens with an empty list, which without a line of copy reads
-   as a broken screen rather than an invitation. */
-.doms-view .doms-sheet-empty {
-  padding: var(--doms-pad) 0;
-  color: var(--doms-muted);
-  font-size: var(--font-ui-small);
-  text-align: center;
-}
-
-.doms-view .doms-sheet-empty.is-hidden {
-  display: none;
-}
-
-/* "Log one of my routines instead" — the way back to a prescribed session from
-   the custom sheet. Quiet: it is the second answer, not the first. */
-.doms-view .doms-sheet-alt {
-  min-height: var(--doms-touch);
-  width: 100%;
-  margin-top: var(--doms-gap);
-  border: none;
-  background: transparent;
-  color: var(--doms-muted);
-  font-size: var(--font-ui-small);
-  text-decoration: underline;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
 .doms-view .doms-sheet-total {
   padding-top: 4px;
   color: var(--doms-muted);
@@ -703,6 +675,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Fill the grid row rather than sitting at its own minimum: a short dashed
+     box beside a full height stepper reads as a broken card, not as the way to
+     add another one. */
+  align-self: stretch;
+  height: 100%;
   min-height: var(--doms-touch);
   padding: 10px;
   border: 1px dashed var(--doms-border);
@@ -1072,7 +1049,32 @@
   border-style: dashed;
 }
 
-/* The workout list for logging one of your own routines instead. */
+/* "Your days" on the create-a-day sheet: what already exists, above the form
+   that makes another one. Removing one lives here because this is where someone
+   who wants it gone will look. */
+
+.doms-view .doms-days {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doms-view .doms-days-heading {
+  color: var(--doms-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* The row is a flex line of name, meta, remove. Meta takes the slack so the
+   remove button stays pinned to the right edge. */
+.doms-view .doms-days .doms-slot-done .doms-slot-meta {
+  flex: 1 1 auto;
+  text-align: right;
+}
+
+/* A list of workout cards on a sheet. */
 
 .doms-view .doms-picker-list {
   display: flex;

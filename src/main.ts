@@ -34,6 +34,7 @@ export default class DomsPlugin extends Plugin {
     weekStart: this.settings.weekStart,
     planId: this.settings.planId,
     customSessions: this.settings.customSessions,
+    customDays: this.settings.customDays,
   }));
 
   /**
@@ -144,6 +145,17 @@ export default class DomsPlugin extends Plugin {
   async saveSettings(): Promise<void> {
     await this.persist();
     this.refreshViews();
+  }
+
+  /**
+   * Saves without rebuilding open views.
+   *
+   * For settings changed *from* the view rather than from the settings tab: a
+   * refresh would tear down the sheet the change was made on and drop the user
+   * back on the week mid-flow. The caller repaints itself instead.
+   */
+  persistSettings(): Promise<void> {
+    return this.persist();
   }
 
   /**

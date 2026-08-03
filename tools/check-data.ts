@@ -11,6 +11,9 @@ import {
 import {
   normalizeDrafts, sweepDrafts, isWorthKeeping, newDraft, keyOf, draftTotal,
 } from "../src/data/drafts";
+import {
+  makeDayId, daySetTotal, dayTemplate, normalizeCustomDays,
+} from "../src/data/custom-days";
 import { parseIsoDate, weekKeyFor, formatIsoDate, addDays, BACKDATE_LIMIT_DAYS, earliestLoggableDate } from "../src/data/dates";
 import type { SessionRecord } from "../src/data/types";
 
@@ -775,6 +778,39 @@ console.log("\n== custom routine ==");
   const tpl = findTemplate(CUSTOM_TEMPLATE_ID, DEFAULT_TEMPLATES)!;
   check("the custom template prescribes nothing", Object.keys(tpl.sets).length, 0);
   check("but still logs as gym work", tpl.kind, "strength");
+}
+
+console.log("\n== created days ==");
+{
+  const taken = new Set(DEFAULT_TEMPLATES.map((t) => t.id));
+  check("id is a readable slug", makeDayId("Arms and abs", taken), "day-arms-and-abs");
+  check("punctuation collapses", makeDayId("Chest / tris!", taken), "day-chest-tris");
+  check("an unnameable name still yields an id", makeDayId("!!!", taken), "day-day");
+  // Namespaced, so a day called "Push" cannot shadow the real push template.
+  check("never collides with a built-in", makeDayId("Push", taken), "day-push");
+  check("collisions suffix", makeDayId("Arms", new Set(["day-arms"])), "day-arms-2");
+  check("and keep counting", makeDayId("Arms", new Set(["day-arms", "day-arms-2"])), "day-arms-3");
+
+  const day = { id: "day-arms", name: "Arms", sets: { biceps: 4, triceps: 4 } };
+  check("set total", daySetTotal(day), 8);
+  const tpl = dayTemplate(day);
+  check("logs as gym work", tpl.kind, "strength");
+  check("flagged as the user's own", tpl.userDefined, true);
+  check("kept off prescribed routines", bonusTemplatesFor(findPlan("three-day"), [...DEFAULT_TEMPLATES, tpl]).some((t) => t.id === "day-arms"), false);
+
+  // Untrusted JSON, same as everything else in data.json.
+  check("non-array is nothing", normalizeCustomDays("nope"), []);
+  check("un-namespaced id dropped", normalizeCustomDays([{ id: "push", name: "X", sets: { chest: 1 } }]), []);
+  check("nameless dropped", normalizeCustomDays([{ id: "day-x", name: "  ", sets: { chest: 1 } }]), []);
+  check("bodiless dropped", normalizeCustomDays([{ id: "day-x", name: "X", sets: {} }]), []);
+  check("duplicate ids collapse", normalizeCustomDays([
+    { id: "day-x", name: "First", sets: { chest: 1 } },
+    { id: "day-x", name: "Second", sets: { chest: 2 } },
+  ]).length, 1);
+  const clean = normalizeCustomDays([
+    { id: "day-x", name: "X", sets: { chest: 3, bad: -1, worse: 1.5 } },
+  ]);
+  check("only whole non-negative counts survive", clean[0].sets, { chest: 3 });
 }
 
 console.log("\n== derived workout names ==");

@@ -83,3 +83,38 @@ export class CustomCard extends Component {
     );
   }
 }
+
+export interface CreateDayCardOptions {
+  onOpen: () => void;
+}
+
+/**
+ * "Create a day" — custom routine only.
+ *
+ * A prescribed routine already has its days; this only makes sense where the
+ * plugin supplies none. Last on the page because building a workout is the rare
+ * action and logging one is the common one.
+ */
+export class CreateDayCard extends Component {
+  constructor(
+    private readonly parent: HTMLElement,
+    private readonly options: CreateDayCardOptions,
+  ) {
+    super();
+  }
+
+  onload(): void {
+    const root = this.parent.createDiv({ cls: "doms-custom" });
+    this.register(() => root.detach());
+
+    const card = root.createEl("button", { cls: "doms-bonus-card" });
+    card.type = "button";
+    card.createSpan({ cls: "doms-bonus-title", text: "Create a day" });
+    card.createSpan({
+      cls: "doms-bonus-hint",
+      text: "Save a workout you repeat, so it is one tap next time.",
+    });
+
+    this.registerDomEvent(card, "click", () => this.options.onOpen());
+  }
+}

@@ -123,7 +123,9 @@ export function bonusTemplatesFor(
       !plan.slots.includes(t.id) &&
       // The custom workout has its own card on every plan. Offering it here too
       // would be a second door onto the same sheet.
-      t.id !== CUSTOM_TEMPLATE_ID,
+      t.id !== CUSTOM_TEMPLATE_ID &&
+      // Days built on the custom routine stay there.
+      !t.userDefined,
   );
 }
 
