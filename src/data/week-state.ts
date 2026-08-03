@@ -10,8 +10,15 @@ import {
   weekKeyFor,
   WeekDay,
 } from "./dates";
-import { findPlan, planTemplates, slotCount, type Plan } from "./plans";
-import { MuscleGroup, Template } from "./templates";
+import {
+  findPlan,
+  isCustomPlan,
+  planTemplates,
+  slotCount,
+  type Plan,
+} from "./plans";
+import { describeSets } from "./muscles";
+import { CUSTOM_TEMPLATE_ID, MuscleGroup, Template } from "./templates";
 import type { SessionRecord, SlotState, StreakState, WeekState } from "./types";
 
 export interface DeriveOptions {
@@ -19,6 +26,8 @@ export interface DeriveOptions {
   templates: readonly Template[];
   /** Decides how many slots the week has and which templates fill them. */
   plan: Plan;
+  /** The weekly bar on the custom plan, which has no slots to count. */
+  customSessions: number;
 }
 
 /**
@@ -44,6 +53,10 @@ export function deriveWeekState(
   );
   const otherSessions = all.filter((s) => otherIds.has(s.templateId));
   const inWeek = all.filter((s) => !otherIds.has(s.templateId));
+
+  if (isCustomPlan(plan)) {
+    return customWeekState(inWeek, otherSessions, date, options);
+  }
 
   const claimed = new Set<string>();
   const seen = new Map<string, number>();
@@ -95,6 +108,86 @@ export function deriveWeekState(
     bonusSessions,
     otherSessions,
     bonusUnlocked: slots.length > 0 && requiredDone === slots.length,
+    volume,
+    totalSets,
+  };
+}
+
+/**
+ * A readable name for a logged session.
+ *
+ * Custom workouts carry no stored name, so they are described by what they hit
+ * — "Chest & shoulders" rather than five identical "Custom workout" rows. Cardio
+ * and other activity already say what they were.
+ */
+export function sessionLabel(
+  session: SessionRecord,
+  templates: readonly Template[],
+): string {
+  if (session.activity) return session.activity;
+  if (session.templateId === CUSTOM_TEMPLATE_ID) {
+    return describeSets(session.sets);
+  }
+  const template = templates.find((t) => t.id === session.templateId);
+  return template?.name ?? describeSets(session.sets);
+}
+
+/**
+ * The custom routine's week.
+ *
+ * There are no slots to match sessions against, so the bar is a count: do the
+ * number of workouts you set yourself. Anything logged counts, whatever it was,
+ * which is the point of choosing this routine. Sessions past the bar become
+ * bonus, exactly as an extra session does on a prescribed plan — turning up more
+ * never raises the bar (spec §2).
+ */
+function customWeekState(
+  inWeek: readonly SessionRecord[],
+  otherSessions: readonly SessionRecord[],
+  date: CivilDate,
+  options: DeriveOptions,
+): WeekState {
+  const { weekStart, templates, customSessions } = options;
+
+  const ordered = [...inWeek].sort((a, b) => compareDates(a.date, b.date));
+  const counted = ordered.slice(0, customSessions);
+
+  const slots: SlotState[] = [];
+  for (let i = 0; i < customSessions; i++) {
+    const session = counted[i] ?? null;
+    slots.push({
+      templateId: session?.templateId ?? CUSTOM_TEMPLATE_ID,
+      name: session ? sessionLabel(session, templates) : `Workout ${i + 1}`,
+      done: session !== null,
+      session,
+    });
+  }
+
+  const volume: Record<MuscleGroup, number> = {};
+  let totalSets = 0;
+  for (const session of ordered) {
+    for (const [muscle, count] of Object.entries(session.sets)) {
+      volume[muscle] = (volume[muscle] ?? 0) + count;
+      totalSets += count;
+    }
+  }
+
+  const requiredDone = counted.length;
+
+  return {
+    weekKey: weekKeyFor(date, weekStart),
+    startIso: formatIsoDate(startOfWeek(date, weekStart)),
+    endIso: formatIsoDate(endOfWeek(date, weekStart)),
+    daysLeft: daysLeftInWeek(date, weekStart),
+    slots,
+    requiredDone,
+    requiredTotal: customSessions,
+    complete: requiredDone >= customSessions,
+    bonusSessions: ordered.slice(customSessions),
+    otherSessions: [...otherSessions],
+    // Nothing to unlock: the custom routine offers one way to log and it is
+    // available from the first session of the week.
+    bonusUnlocked: false,
     volume,
     totalSets,
   };
@@ -195,7 +288,15 @@ function completeWeekKeys(
   sessions: readonly SessionRecord[],
   options: DeriveOptions,
 ): Set<string> {
+  const otherIds = new Set(
+    options.templates.filter((t) => t.kind === "other").map((t) => t.id),
+  );
+
   const byWeek = new Map<string, Map<string, number>>();
+  // Gym sessions only, per week. "A different workout" never fills a slot and
+  // never counts toward the custom bar either — a hike is logged, not required.
+  const gymCount = new Map<string, number>();
+
   for (const session of sessions) {
     let counts = byWeek.get(session.weekKey);
     if (!counts) {
@@ -203,11 +304,29 @@ function completeWeekKeys(
       byWeek.set(session.weekKey, counts);
     }
     counts.set(session.templateId, (counts.get(session.templateId) ?? 0) + 1);
+
+    if (!otherIds.has(session.templateId)) {
+      gymCount.set(session.weekKey, (gymCount.get(session.weekKey) ?? 0) + 1);
+    }
   }
 
   const complete = new Set<string>();
   for (const [weekKey, counts] of byWeek) {
     const weekPlan = planForWeek(weekKey, sessions, options.plan);
+
+    // The custom routine judges a week by how many times you turned up, not by
+    // which sessions they were.
+    //
+    // It is judged against the bar as it stands today, not one stamped per week:
+    // the number is the user's own, changed deliberately, and a history that
+    // disagreed with the setting in front of them would be harder to explain
+    // than one that moves with it.
+    if (isCustomPlan(weekPlan)) {
+      if ((gymCount.get(weekKey) ?? 0) >= options.customSessions) {
+        complete.add(weekKey);
+      }
+      continue;
+    }
 
     const needed = new Map<string, number>();
     for (const id of weekPlan.slots) needed.set(id, (needed.get(id) ?? 0) + 1);

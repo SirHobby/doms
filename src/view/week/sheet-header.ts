@@ -16,6 +16,12 @@ export interface SheetHeaderOptions {
   /** The day the sheet opens on. Today, unless the flow already picked one. */
   date?: CivilDate;
   onBack: () => void;
+  /**
+   * Fires after the user picks a different day. Drafts are keyed by workout and
+   * date, so a change here has to move the draft rather than orphan it under the
+   * old key.
+   */
+  onDateChange?: (date: CivilDate, previous: CivilDate) => void;
 }
 
 /**
@@ -70,8 +76,12 @@ export class SheetHeader extends Component {
       selected: this.date,
       weekStart: this.options.weekStart,
       onPick: (picked) => {
+        const previous = this.date;
         this.date = picked;
         this.paint();
+        if (!isSameDate(picked, previous)) {
+          this.options.onDateChange?.(picked, previous);
+        }
       },
     }).open();
   }

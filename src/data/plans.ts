@@ -1,4 +1,4 @@
-import { findTemplate, type Template } from "./templates";
+import { CUSTOM_TEMPLATE_ID, findTemplate, type Template } from "./templates";
 
 /**
  * A plan is an ordered list of required slots for the week.
@@ -13,11 +13,42 @@ export interface Plan {
   name: string;
   /** One line, shown under the picker. */
   description: string;
-  /** Template ids, in suggested order. Repeats are meaningful. */
+  /** Template ids, in suggested order. Repeats are meaningful. Empty if custom. */
   slots: string[];
+  /**
+   * A custom routine prescribes nothing. There are no slots to fill, so the
+   * week's bar is a *count* of sessions the user sets themselves, and any
+   * workout logged counts toward it whatever it was.
+   *
+   * The bar still exists, because it is the whole product thesis: the metric
+   * that matters is whether you turned up as often as you said you would.
+   * Dropping it here would leave a log rather than a tracker.
+   */
+  custom?: boolean;
 }
 
 export const DEFAULT_PLAN_ID = "three-day";
+
+export const CUSTOM_PLAN_ID = "custom";
+
+/** Bounds on the custom weekly count. One a week, up to two a day. */
+export const MIN_CUSTOM_SESSIONS = 1;
+export const MAX_CUSTOM_SESSIONS = 14;
+export const DEFAULT_CUSTOM_SESSIONS = 3;
+
+export function clampCustomSessions(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_CUSTOM_SESSIONS;
+  }
+  return Math.min(
+    MAX_CUSTOM_SESSIONS,
+    Math.max(MIN_CUSTOM_SESSIONS, Math.round(value)),
+  );
+}
+
+export function isCustomPlan(plan: Plan): boolean {
+  return plan.custom === true;
+}
 
 export const PLANS: readonly Plan[] = [
   {
@@ -40,6 +71,14 @@ export const PLANS: readonly Plan[] = [
     description:
       "Two full rounds of push, pull and legs, then a cardio day. The most demanding option.",
     slots: ["push", "pull", "legs", "push", "pull", "legs", "cardio"],
+  },
+  {
+    id: CUSTOM_PLAN_ID,
+    name: "Custom",
+    description:
+      "No prescribed sessions. Build each workout from the body parts you trained, and set your own number of sessions a week.",
+    slots: [],
+    custom: true,
   },
 ];
 
@@ -74,8 +113,17 @@ export function bonusTemplatesFor(
   plan: Plan,
   templates: readonly Template[],
 ): Template[] {
+  // A custom routine requires nothing, so nothing can be extra to it. Every
+  // session is logged the same way and counts the same amount.
+  if (isCustomPlan(plan)) return [];
+
   return templates.filter(
-    (t) => t.kind === "strength" && !plan.slots.includes(t.id),
+    (t) =>
+      t.kind === "strength" &&
+      !plan.slots.includes(t.id) &&
+      // The custom workout has its own card on every plan. Offering it here too
+      // would be a second door onto the same sheet.
+      t.id !== CUSTOM_TEMPLATE_ID,
   );
 }
 

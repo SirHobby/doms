@@ -23,9 +23,41 @@ export const REHAB_AREAS: readonly MuscleGroup[] = [
   // Tracked leg groups, offered here too: a rehabbed hamstring or achilles is
   // still hamstring and calf work, so it counts toward those weekly bars rather
   // than becoming a shadow group that means the same thing.
+  //
+  // Quads are deliberately not here. Patellar and quad tendon rehab is quad
+  // loading, but that is exactly what the "knees" area already is — Spanish
+  // squats, wall sits, terminal knee extension — so a quads entry would be a
+  // second name for one thing rather than coverage of a gap.
   "hamstrings",
   "calves",
 ];
+
+/**
+ * The rehab areas that open with a suggested count. Everything else in
+ * REHAB_AREAS starts at zero and is dropped at commit unless you count it.
+ *
+ * These four are the ones people actually come back to week after week, so they
+ * are pre-filled; the rest are offers.
+ */
+const REHAB_SUGGESTED: Record<MuscleGroup, number> = {
+  "rotator cuff": 3,
+  neck: 2,
+  hips: 3,
+  ankles: 2,
+};
+
+/**
+ * Built from REHAB_AREAS rather than written out by hand.
+ *
+ * The two lists were maintained separately and had already drifted: adding a
+ * body part to the canonical list put it in the picker but not on the rehab
+ * sheet, which is a silent gap nobody notices until they go looking for it.
+ */
+function rehabSets(): Record<MuscleGroup, number> {
+  const sets: Record<MuscleGroup, number> = {};
+  for (const area of REHAB_AREAS) sets[area] = REHAB_SUGGESTED[area] ?? 0;
+  return sets;
+}
 
 /**
  * What a template is, not what role it plays — the active plan decides which
@@ -36,6 +68,9 @@ export const REHAB_AREAS: readonly MuscleGroup[] = [
  * "other" is activity outside the plan entirely. It never fills a slot.
  */
 export type TemplateKind = "strength" | "cardio" | "other";
+
+/** The build-it-yourself workout. Offered on every plan, required by none. */
+export const CUSTOM_TEMPLATE_ID = "custom";
 
 export interface Template {
   id: string;
@@ -127,30 +162,23 @@ export const DEFAULT_TEMPLATES: readonly Template[] = [
     // Every rehab area is offered; the common ones carry a suggested count and
     // the rest start at zero. Kept out of the derived volume targets, which are
     // computed from the required templates only.
-    sets: {
-      "rotator cuff": 3,
-      "shoulder blades": 0,
-      neck: 2,
-      "thoracic spine": 0,
-      wrists: 0,
-      elbows: 0,
-      "deep core": 0,
-      "lower back": 0,
-      hips: 3,
-      "hip flexors": 0,
-      knees: 0,
-      hamstrings: 0,
-      calves: 0,
-      ankles: 2,
-      feet: 0,
-      balance: 0,
-    },
+    sets: rehabSets(),
   },
   {
     id: "cardio",
     name: "Cardio",
     kind: "cardio",
     // Conditioning is recorded as an activity, not as sets per muscle.
+    sets: {},
+  },
+  {
+    id: CUSTOM_TEMPLATE_ID,
+    name: "Custom workout",
+    kind: "strength",
+    // Deliberately empty. The sheet opens with no rows and you add the body
+    // parts you actually trained, which is the point: a workout the plugin
+    // never prescribed still has to be loggable as gym work, counting toward
+    // the week and the volume readout like any other.
     sets: {},
   },
   {

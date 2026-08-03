@@ -1,6 +1,15 @@
-import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
+import { debounce, Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { DOMS_DISPLAY_NAME, DOMS_ICON, VIEW_TYPE_DOMS } from "./constants";
 import { DomsData } from "./data/doms-data";
+import {
+  draftKey,
+  isWorthKeeping,
+  keyOf,
+  normalizeDrafts,
+  sweepDrafts,
+  type DraftMap,
+  type SessionDraft,
+} from "./data/drafts";
 import { DomsSettingTab } from "./settings/settings-tab";
 import { DomsSettings, normalizeSettings } from "./settings/types";
 import { DomsView } from "./view/doms-view";
@@ -10,6 +19,13 @@ export default class DomsPlugin extends Plugin {
   settings: DomsSettings = normalizeSettings(null);
 
   /**
+   * In-progress sessions, keyed by workout and day. Lives beside the settings in
+   * data.json rather than in the vault: a draft is plugin state, not training
+   * history, and nothing about it should show up in a folder the user reads.
+   */
+  drafts: DraftMap = {};
+
+  /**
    * The data layer. Public so it can be driven from the console before any UI
    * depends on it: app.plugins.plugins.doms.data
    */
@@ -17,7 +33,14 @@ export default class DomsPlugin extends Plugin {
     root: this.settings.rootFolder,
     weekStart: this.settings.weekStart,
     planId: this.settings.planId,
+    customSessions: this.settings.customSessions,
   }));
+
+  /**
+   * Every stepper tap would otherwise be a write to data.json. Counting a set is
+   * the highest frequency action in the plugin, and it happens on a phone.
+   */
+  private readonly flushDrafts = debounce(() => void this.persist(), 400, false);
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -103,12 +126,53 @@ export default class DomsPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = normalizeSettings(await this.loadData());
+    const raw = (await this.loadData()) as Record<string, unknown> | null;
+    this.settings = normalizeSettings(raw);
+    // Swept on load, so an abandoned draft costs nothing and never needs its own
+    // write to clear.
+    this.drafts = sweepDrafts(normalizeDrafts(raw?.drafts));
+  }
+
+  /**
+   * Settings and drafts share one file. They are written together so that saving
+   * either cannot drop the other.
+   */
+  private persist(): Promise<void> {
+    return this.saveData({ ...this.settings, drafts: this.drafts });
   }
 
   async saveSettings(): Promise<void> {
-    await this.saveData(this.settings);
+    await this.persist();
     this.refreshViews();
+  }
+
+  /**
+   * Records an in-progress session.
+   *
+   * Deliberately does *not* refresh the views: a rebuild would tear down the
+   * very sheet the user is counting on, which is the bug this whole feature
+   * exists to fix.
+   */
+  saveDraft(draft: SessionDraft): void {
+    const key = keyOf(draft);
+
+    // An empty draft is not worth a card on the week, so emptying one back out
+    // — counting to three and back to zero — clears it rather than leaving an
+    // "In progress" marker on a workout nobody started.
+    if (isWorthKeeping(draft)) this.drafts[key] = draft;
+    else delete this.drafts[key];
+
+    this.flushDrafts();
+  }
+
+  /** Drops a draft: committed, or discarded from the week. */
+  clearDraft(templateId: string, dateIso: string): void {
+    delete this.drafts[draftKey(templateId, dateIso)];
+    this.flushDrafts();
+  }
+
+  getDraft(templateId: string, dateIso: string): SessionDraft | null {
+    return this.drafts[draftKey(templateId, dateIso)] ?? null;
   }
 
   /** Push a settings change into every open view without a reload. */

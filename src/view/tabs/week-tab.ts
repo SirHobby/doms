@@ -1,35 +1,43 @@
 import { Component, type App } from "obsidian";
 import { TAB_LABELS, TabId } from "../../constants";
 import {
+  formatIsoDate,
   formatShortDate,
   isSameDate,
   today,
   type CivilDate,
   type WeekDay,
 } from "../../data/dates";
-import { bonusTemplatesFor, loggableTemplates } from "../../data/plans";
+import {
+  bonusTemplatesFor,
+  isCustomPlan,
+  loggableTemplates,
+} from "../../data/plans";
 import {
   CARDIO_ACTIVITIES,
+  CUSTOM_TEMPLATE_ID,
   DEFAULT_ACTIVITIES,
   findTemplate,
   OTHER_TEMPLATE_ID,
   type MuscleGroup,
 } from "../../data/templates";
+import { draftTotal, type SessionDraft } from "../../data/drafts";
 import { orderSlots, suggestNext } from "../../data/suggest";
 import type { SessionRecord, StreakState, WeekState } from "../../data/types";
+import { sessionLabel } from "../../data/week-state";
 import type { AsciiKey } from "../../ui/ascii-fonts";
 import { pickCelebrationImage } from "../../data/celebration-media";
 import { Celebration, type CelebrationTier } from "../../ui/celebration";
+import { ConfirmModal } from "../../ui/confirm-modal";
 import { UndoToast } from "../../ui/undo-toast";
 import { ActivitySheet } from "../week/activity-sheet";
 import { BonusCard } from "../week/bonus-card";
+import { CustomCard } from "../week/custom-card";
 import { OtherCard } from "../week/other-card";
-import { PreviousCard } from "../week/previous-card";
 import { SessionSheet } from "../week/session-sheet";
 import { SlotCard } from "../week/slot-card";
 import { WeekSummary } from "../week/week-summary";
 import { WorkoutPicker } from "../week/workout-picker";
-import { DatePickerModal } from "../../ui/date-picker-modal";
 import { MotivationModal } from "../../ui/motivation-modal";
 import { DomsTab, type TabContext } from "./doms-tab";
 
@@ -109,6 +117,20 @@ export class WeekTab extends DomsTab {
 
     this.mount(new WeekSummary(body, week, streaks));
 
+    if (isCustomPlan(data.plan)) this.renderCustomWeek(body, week);
+    else this.renderPlannedWeek(body, week);
+
+    this.mount(
+      new OtherCard(body, {
+        existing: week.otherSessions,
+        onOpen: () => this.showActivitySheet(),
+      }),
+    );
+  }
+
+  private renderPlannedWeek(body: HTMLElement, week: WeekState): void {
+    const { data } = this.context.plugin;
+
     const suggestion = suggestNext(week);
     for (const slot of orderSlots(week)) {
       this.mount(
@@ -116,7 +138,9 @@ export class WeekTab extends DomsTab {
           slot,
           template: findTemplate(slot.templateId, data.templates),
           nudge: suggestion?.slot === slot ? suggestion.nudge : null,
+          draft: this.draftFor(slot.templateId),
           onOpen: (templateId) => this.showSheet(templateId),
+          onDiscard: (draft) => this.confirmDiscard(draft),
         }),
       );
     }
@@ -130,37 +154,93 @@ export class WeekTab extends DomsTab {
       }),
     );
 
-    this.mount(
-      new OtherCard(body, {
-        existing: week.otherSessions,
-        onOpen: () => this.showActivitySheet(),
-      }),
-    );
-
-    // Last on the page: a correction affordance, not a way to log today.
-    this.mount(
-      new PreviousCard(body, { onOpen: () => this.pickPreviousDate() }),
-    );
+    this.mount(this.customCard(body));
   }
 
   /**
-   * Step one of logging a previous workout: which day was it?
-   *
-   * The date comes first because it is what the user actually remembers — "I
-   * forgot to log Thursday" — and because it decides which week the session
-   * lands in, which is the whole point of the flow.
+   * The custom routine has no slots to fill, so the week reads as what you have
+   * actually done plus one way to add to it. Sessions past the bar still show —
+   * turning up more than you promised should not make a workout disappear.
    */
-  private pickPreviousDate(): void {
-    const { plugin } = this.context;
+  private renderCustomWeek(body: HTMLElement, week: WeekState): void {
+    const { data } = this.context.plugin;
 
-    new DatePickerModal(plugin.app, {
-      selected: today(),
-      weekStart: plugin.settings.weekStart,
-      onPick: (date) => this.showWorkoutPicker(date),
+    for (const slot of week.slots) {
+      if (!slot.done) continue;
+      this.mount(
+        new SlotCard(body, {
+          slot,
+          template: findTemplate(slot.templateId, data.templates),
+          nudge: null,
+          onOpen: () => this.showCustomSheet(),
+        }),
+      );
+    }
+
+    for (const session of week.bonusSessions) {
+      this.mount(
+        new SlotCard(body, {
+          slot: {
+            templateId: session.templateId,
+            name: sessionLabel(session, data.templates),
+            done: true,
+            session,
+          },
+          template: null,
+          nudge: null,
+          onOpen: () => this.showCustomSheet(),
+        }),
+      );
+    }
+
+    this.mount(this.customCard(body));
+  }
+
+  private customCard(body: HTMLElement): CustomCard {
+    return new CustomCard(body, {
+      draft: this.draftFor(CUSTOM_TEMPLATE_ID),
+      onOpen: () => this.showCustomSheet(),
+      onDiscard: (draft) => this.confirmDiscard(draft),
+    });
+  }
+
+  /**
+   * The draft for a workout on the day it would be logged for.
+   *
+   * Only today's is surfaced on the week: a draft you backdated belongs to a
+   * different day, and advertising it on this week's card would be a route into
+   * editing the wrong session.
+   */
+  private draftFor(templateId: string): SessionDraft | null {
+    return this.context.plugin.getDraft(templateId, formatIsoDate(today()));
+  }
+
+  /** Throwing away counted sets is worth one tap of friction. */
+  private confirmDiscard(draft: SessionDraft): void {
+    const { plugin } = this.context;
+    const total = draftTotal(draft);
+
+    const drop = () => {
+      plugin.clearDraft(draft.templateId, draft.dateIso);
+      this.showWeek();
+    };
+
+    if (total === 0) {
+      drop();
+      return;
+    }
+
+    new ConfirmModal(plugin.app, {
+      title: "Discard this workout?",
+      body: [
+        `${total} ${total === 1 ? "set" : "sets"} counted so far. Nothing has been logged yet, so this cannot be undone.`,
+      ],
+      confirmText: "Discard",
+      onConfirm: drop,
     }).open();
   }
 
-  /** Step two: which workout was it? */
+  /** Step two of the old previous-workout flow: which routine was it? */
   private showWorkoutPicker(date: CivilDate): void {
     const body = this.resetBody();
     if (!body) return;
@@ -170,14 +250,21 @@ export class WeekTab extends DomsTab {
 
     this.mount(
       new WorkoutPicker(body, {
-        templates: loggableTemplates(data.plan, data.templates),
+        templates: loggableTemplates(data.plan, data.templates).filter(
+          (t) => t.id !== CUSTOM_TEMPLATE_ID,
+        ),
         app: this.context.plugin.app,
         weekStart: this.context.plugin.settings.weekStart,
         date,
-        onBack: () => this.showWeek(),
+        onBack: () => this.showCustomSheet(),
         onPick: (templateId, picked) => this.showSheet(templateId, picked),
       }),
     );
+  }
+
+  /** The build-it-yourself sheet: no prescribed rows, add what you trained. */
+  private showCustomSheet(date?: CivilDate): void {
+    this.showSheet(CUSTOM_TEMPLATE_ID, date);
   }
 
   private showActivitySheet(date?: CivilDate): void {
@@ -188,10 +275,13 @@ export class WeekTab extends DomsTab {
     this.mount(
       new ActivitySheet(body, {
         title: "A different workout",
+        templateId: OTHER_TEMPLATE_ID,
         activities: DEFAULT_ACTIVITIES,
         commitText: "Log it",
         date,
+        draft: this.draftAt(OTHER_TEMPLATE_ID, date),
         ...this.sheetChrome(),
+        onDraft: (draft, previousKey) => this.onDraft(draft, previousKey),
         onCommit: (activity, note, when) =>
           this.commit(OTHER_TEMPLATE_ID, {}, note, when, activity),
       }),
@@ -206,6 +296,27 @@ export class WeekTab extends DomsTab {
       weekStart: plugin.settings.weekStart,
       onBack: () => this.showWeek(),
     };
+  }
+
+  private draftAt(templateId: string, date?: CivilDate): SessionDraft | null {
+    return this.context.plugin.getDraft(
+      templateId,
+      formatIsoDate(date ?? today()),
+    );
+  }
+
+  /**
+   * Persists an edit, moving the draft if the sheet's date changed. Never
+   * repaints: a rebuild here would destroy the sheet being typed into.
+   */
+  private onDraft(draft: SessionDraft, previousKey: string): void {
+    const { plugin } = this.context;
+
+    const [templateId, dateIso] = previousKey.split("|");
+    if (dateIso && dateIso !== draft.dateIso) {
+      plugin.clearDraft(templateId, dateIso);
+    }
+    plugin.saveDraft(draft);
   }
 
   private showSheet(templateId: string, date?: CivilDate): void {
@@ -231,10 +342,13 @@ export class WeekTab extends DomsTab {
       this.mount(
         new ActivitySheet(body, {
           title: template.name,
+          templateId,
           activities: CARDIO_ACTIVITIES,
           commitText: "Log it",
           date,
+          draft: this.draftAt(templateId, date),
           ...this.sheetChrome(),
+          onDraft: (draft, previousKey) => this.onDraft(draft, previousKey),
           onCommit: (activity, note, when) =>
             this.commit(templateId, {}, note, when, activity),
         }),
@@ -246,11 +360,26 @@ export class WeekTab extends DomsTab {
       new SessionSheet(body, {
         template,
         date,
+        draft: this.draftAt(templateId, date),
         ...this.sheetChrome(),
+        onDraft: (draft, previousKey) => this.onDraft(draft, previousKey),
         onCommit: (sets, note, when) =>
           this.commit(templateId, sets, note, when),
       }),
     );
+
+    // On the custom sheet only: a quiet way back to logging a prescribed
+    // routine, which is what the old previous-workout flow was for.
+    if (templateId === CUSTOM_TEMPLATE_ID) {
+      const link = body.createEl("button", {
+        cls: "doms-sheet-alt",
+        text: "Log one of my routines instead",
+      });
+      link.type = "button";
+      this.registerDomEvent(link, "click", () =>
+        this.showWorkoutPicker(date ?? today()),
+      );
+    }
   }
 
   private async commit(
@@ -273,6 +402,9 @@ export class WeekTab extends DomsTab {
       this.showWeek();
       return;
     }
+
+    // The draft became a session, so it has nothing left to preserve.
+    this.context.plugin.clearDraft(templateId, formatIsoDate(date));
 
     const week = data.weekState();
     const streaks = data.streaks();

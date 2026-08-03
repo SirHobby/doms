@@ -7,20 +7,17 @@ import {
   today,
   weekdayLabels,
   weekKeyFor,
-  WeekDay,
 } from "./dates";
-import type { Plan } from "./plans";
-import type { Template } from "./templates";
 import type { SessionRecord } from "./types";
 import { muscleLabel, muscleRank, type MuscleGroup } from "./muscles";
-import { computeStreaks, planForWeek } from "./week-state";
+import { computeStreaks, planForWeek, type DeriveOptions } from "./week-state";
 import { trackedTargets } from "./volume";
 
-export interface StatsOptions {
-  weekStart: WeekDay;
-  templates: readonly Template[];
-  plan: Plan;
-}
+/**
+ * Stats needs exactly what week derivation needs, so it is one shape rather than
+ * two that have to be kept in step.
+ */
+export type StatsOptions = DeriveOptions;
 
 export interface StatsSummary {
   totalSessions: number;

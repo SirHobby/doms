@@ -1,6 +1,6 @@
 {
   "name": "doms",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "D.O.M.S — an opinionated, mobile-first workout tracker for Obsidian.",
   "main": "main.js",
   "private": true,

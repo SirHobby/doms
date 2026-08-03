@@ -100,11 +100,29 @@ export const MUSCLE_GROUPS: readonly MuscleGroupDef[] = [
   { id: "elbows", label: "Elbows", tracked: false, section: "rehab" },
   { id: "deep core", label: "Deep core", tracked: false, section: "rehab" },
   { id: "lower back", label: "Lower back", tracked: false, section: "rehab" },
-  { id: "hips", label: "Hips", tracked: false, section: "rehab" },
+  // "Hips" has always meant the abductors — its content is the one-leg collapse
+  // test and side-lying work. The label now says so, because once adductors sit
+  // next to it on the same list, an unqualified "Hips" is ambiguous.
+  { id: "hips", label: "Hips & glute medius", tracked: false, section: "rehab" },
   { id: "hip flexors", label: "Hip flexors", tracked: false, section: "rehab" },
+  // Adductor strain is one of the most common injuries in anything involving
+  // change of direction, and the groin had nowhere to be logged: not a leg
+  // group, not covered by hips, which is abductor work and its opposite.
+  { id: "adductors", label: "Adductors & groin", tracked: false, section: "rehab" },
   { id: "knees", label: "Knees", tracked: false, section: "rehab" },
+  // Shin splints are the other big miss. Calves cover the back of the lower leg
+  // and ankles cover the joint, which left the front of the shin — the thing
+  // that actually hurts when mileage goes up — with no home.
+  {
+    id: "tibialis anterior",
+    label: "Shins & tibialis",
+    tracked: false,
+    section: "rehab",
+  },
   { id: "ankles", label: "Ankles", tracked: false, section: "rehab" },
-  { id: "feet", label: "Feet", tracked: false, section: "rehab" },
+  // Arches, heels and plantar fascia. The toes are in here too; a separate
+  // entry for them would be more precision than anyone logs.
+  { id: "feet", label: "Feet & arches", tracked: false, section: "rehab" },
   { id: "balance", label: "Balance", tracked: false, section: "rehab" },
 ];
 
@@ -159,6 +177,39 @@ export function muscleSections(
   }
 
   return out;
+}
+
+/**
+ * A one-line name for a set of body parts, e.g. "Chest & shoulders".
+ *
+ * Custom workouts carry no name — asking for one is a field to fill in while
+ * you are standing in a gym, which is exactly the friction this plugin avoids.
+ * The body parts already say what it was, so the label is derived at render
+ * time rather than stored. Nothing on disk depends on it, so it can change.
+ */
+function uncapitalize(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+export function describeSets(
+  sets: Record<MuscleGroup, number>,
+  fallback = "Custom workout",
+): string {
+  const worked = Object.entries(sets)
+    .filter(([, count]) => count > 0)
+    .map(([muscle]) => muscle)
+    .sort((a, b) => muscleRank(a) - muscleRank(b));
+
+  if (worked.length === 0) return fallback;
+  if (worked.length === 1) return muscleLabel(worked[0]);
+  if (worked.length === 2) {
+    // Labels carry their own casing for standalone use, so joining two of them
+    // reads "Chest & Shoulders". Only the first word of the phrase is a start.
+    return `${muscleLabel(worked[0])} & ${uncapitalize(muscleLabel(worked[1]))}`;
+  }
+  // Past two, naming them all overflows a 360px row. The first still tells you
+  // which workout this was; the count tells you it was not just that.
+  return `${muscleLabel(worked[0])} + ${worked.length - 1} more`;
 }
 
 /** Sort key so every list of body parts comes out in canonical order. */

@@ -1,15 +1,21 @@
 import { App } from "obsidian";
 import { CivilDate, today, WeekDay } from "./dates";
 import { SessionStore } from "./session-store";
-import { findPlan, type Plan } from "./plans";
+import { clampCustomSessions, findPlan, type Plan } from "./plans";
 import { DEFAULT_TEMPLATES, Template } from "./templates";
 import type { CommitInput, SessionRecord, StreakState, WeekState } from "./types";
-import { computeStreaks, deriveWeekState } from "./week-state";
+import {
+  computeStreaks,
+  deriveWeekState,
+  type DeriveOptions,
+} from "./week-state";
 
 export interface DataConfig {
   root: string;
   weekStart: WeekDay;
   planId: string;
+  /** The weekly bar on the custom plan. Ignored by every other plan. */
+  customSessions: number;
 }
 
 /**
@@ -38,11 +44,19 @@ export class DomsData {
     return findPlan(this.config().planId);
   }
 
-  private get options() {
+  /**
+   * Everything the derivation functions need, in one place.
+   *
+   * Public because the Stats tab and the activity widget need the identical
+   * shape: three call sites building it by hand is how a new field ends up
+   * wired into one screen and silently missing from the others.
+   */
+  get options(): DeriveOptions {
     return {
       weekStart: this.config().weekStart,
       templates: this.templates,
       plan: this.plan,
+      customSessions: clampCustomSessions(this.config().customSessions),
     };
   }
 

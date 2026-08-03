@@ -351,6 +351,37 @@
   border-width: 2px;
 }
 
+/* A workout counted but not yet logged. It has to read as neither open nor
+   done: the accent edge says "you started this", and the actions say what the
+   two ways out of it are. */
+.doms-view .doms-slot-open.is-progress,
+.doms-view .doms-bonus-card.is-progress {
+  border-color: var(--doms-accent);
+  border-style: solid;
+  cursor: default;
+}
+
+.doms-view .doms-slot-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+/* Continue takes the room; discard is deliberately the smaller target, because
+   it throws away counting the user cannot get back. */
+.doms-view .doms-button-small {
+  min-height: 36px;
+  width: auto;
+  flex: 1 1 auto;
+  font-size: var(--font-ui-small);
+}
+
+.doms-view .doms-slot-actions .doms-button-secondary {
+  flex: 0 0 auto;
+  padding: 0 14px;
+}
+
 /* Completed slots collapse to one line — the decision is already made. */
 .doms-view .doms-slot-done {
   min-height: var(--doms-touch);
@@ -538,6 +569,34 @@
   .doms-view .doms-sheet-list {
     grid-template-columns: 1fr;
   }
+}
+
+/* The custom sheet opens with an empty list, which without a line of copy reads
+   as a broken screen rather than an invitation. */
+.doms-view .doms-sheet-empty {
+  padding: var(--doms-pad) 0;
+  color: var(--doms-muted);
+  font-size: var(--font-ui-small);
+  text-align: center;
+}
+
+.doms-view .doms-sheet-empty.is-hidden {
+  display: none;
+}
+
+/* "Log one of my routines instead" — the way back to a prescribed session from
+   the custom sheet. Quiet: it is the second answer, not the first. */
+.doms-view .doms-sheet-alt {
+  min-height: var(--doms-touch);
+  width: 100%;
+  margin-top: var(--doms-gap);
+  border: none;
+  background: transparent;
+  color: var(--doms-muted);
+  font-size: var(--font-ui-small);
+  text-decoration: underline;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .doms-view .doms-sheet-total {
@@ -1000,20 +1059,20 @@
   gap: var(--doms-gap);
 }
 
-/* "Log a previous workout": last on the page and quieter than the cards above
-   it, because it corrects a past week rather than advancing this one. */
+/* "Log a custom workout": last on the page and quieter than the cards above it,
+   because it is for the session the plan did not ask for. */
 
-.doms-view .doms-previous {
+.doms-view .doms-custom {
   display: flex;
   flex-direction: column;
   gap: var(--doms-gap);
 }
 
-.doms-view .doms-previous .doms-bonus-card {
+.doms-view .doms-custom .doms-bonus-card {
   border-style: dashed;
 }
 
-/* The workout list on the way to logging a previous session. */
+/* The workout list for logging one of your own routines instead. */
 
 .doms-view .doms-picker-list {
   display: flex;

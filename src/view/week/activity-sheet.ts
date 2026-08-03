@@ -1,10 +1,14 @@
 import { Component, type App } from "obsidian";
-import { today, type CivilDate, type WeekDay } from "../../data/dates";
+import { formatIsoDate, today, type CivilDate, type WeekDay } from "../../data/dates";
+import type { SessionDraft } from "../../data/drafts";
+import { draftDate, keyOf, newDraft } from "../../data/drafts";
 import { SheetHeader } from "./sheet-header";
 
 export interface ActivitySheetOptions {
   /** Heading, e.g. "Cardio" or "A different workout". */
   title: string;
+  /** The template being logged, so a draft can be keyed to it. */
+  templateId: string;
   /** Fast-path suggestions. Free text is always allowed. */
   activities: readonly string[];
   /** Text on the commit button. */
@@ -14,7 +18,10 @@ export interface ActivitySheetOptions {
   weekStart: WeekDay;
   /** Seeds the header when the flow already chose a day. */
   date?: CivilDate;
+  /** An in-progress entry to pick back up, if there is one. */
+  draft?: SessionDraft | null;
   onBack: () => void;
+  onDraft?: (draft: SessionDraft, previousKey: string) => void;
   onCommit: (activity: string, note: string, date: CivilDate) => Promise<void>;
 }
 
@@ -33,12 +40,25 @@ export class ActivitySheet extends Component {
   private header: SheetHeader | null = null;
   private chips = new Map<string, HTMLButtonElement>();
   private committing = false;
+  private draft: SessionDraft;
 
   constructor(
     private readonly parent: HTMLElement,
     private readonly options: ActivitySheetOptions,
   ) {
     super();
+
+    const draft = options.draft;
+    this.draft = draft
+      ? { ...draft, sets: { ...draft.sets } }
+      : newDraft(options.templateId, options.date ?? today());
+
+    // A restored activity comes back as a chip if it was one, or as typed text
+    // if it was not. The sheet cannot tell the difference after the fact, so it
+    // matches against the offered list.
+    if (options.activities.includes(this.draft.activity)) {
+      this.selected = this.draft.activity;
+    }
   }
 
   onload(): void {
@@ -58,10 +78,26 @@ export class ActivitySheet extends Component {
       title: this.options.title,
       app: this.options.app,
       weekStart: this.options.weekStart,
-      date: this.options.date,
+      date: draftDate(this.draft),
       onBack: () => this.options.onBack(),
+      onDateChange: (date) => {
+        const previousKey = keyOf(this.draft);
+        this.draft.dateIso = formatIsoDate(date);
+        this.emitDraft(previousKey);
+      },
     });
     this.addChild(this.header);
+  }
+
+  private emitDraft(previousKey: string): void {
+    this.draft.activity = this.value();
+    this.draft.note = this.noteEl?.value ?? "";
+    this.draft.updatedAt = Date.now();
+    this.options.onDraft?.({ ...this.draft }, previousKey);
+  }
+
+  private onChanged(): void {
+    this.emitDraft(keyOf(this.draft));
   }
 
   private renderChips(root: HTMLElement): void {
@@ -81,6 +117,7 @@ export class ActivitySheet extends Component {
         this.selected = this.selected === activity ? "" : activity;
         if (this.customEl) this.customEl.value = "";
         this.paint();
+        this.onChanged();
       });
 
       this.chips.set(activity, chip);
@@ -98,15 +135,19 @@ export class ActivitySheet extends Component {
     });
     this.customEl = field;
 
+    // Free text, restored: only if it was not one of the offered chips.
+    if (this.draft.activity && !this.selected) field.value = this.draft.activity;
+
     this.registerDomEvent(field, "input", () => {
       // Typing wins over a chip; they are two ways to fill one value.
       if (field.value.trim()) this.selected = "";
       this.paint();
+      this.onChanged();
     });
   }
 
   private renderNote(root: HTMLElement): void {
-    this.noteEl = root.createEl("textarea", {
+    const field = root.createEl("textarea", {
       cls: "doms-sheet-textarea",
       attr: {
         rows: "3",
@@ -114,6 +155,9 @@ export class ActivitySheet extends Component {
         "aria-label": "Note about today",
       },
     });
+    field.value = this.draft.note;
+    this.noteEl = field;
+    this.registerDomEvent(field, "input", () => this.onChanged());
   }
 
   private renderActions(root: HTMLElement): void {

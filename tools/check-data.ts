@@ -1,16 +1,23 @@
-import { deriveWeekState, computeStreaks } from "../src/data/week-state";
-import { DEFAULT_TEMPLATES, REHAB_AREAS } from "../src/data/templates";
+import { deriveWeekState, computeStreaks, sessionLabel } from "../src/data/week-state";
+import { DEFAULT_TEMPLATES, REHAB_AREAS, CUSTOM_TEMPLATE_ID, findTemplate } from "../src/data/templates";
 import {
-  LATS_LOWER_BACK, MUSCLE_GROUPS, UPPER_BACK, findMuscle, isTracked,
+  LATS_LOWER_BACK, MUSCLE_GROUPS, UPPER_BACK, describeSets, findMuscle, isTracked,
   migrateSets, muscleSections, splitLegacyBack, trackedMuscles,
 } from "../src/data/muscles";
-import { PLANS, findPlan, bonusTemplatesFor, slotCount, loggableTemplates } from "../src/data/plans";
+import {
+  PLANS, findPlan, bonusTemplatesFor, slotCount, loggableTemplates,
+  CUSTOM_PLAN_ID, clampCustomSessions, isCustomPlan,
+} from "../src/data/plans";
+import {
+  normalizeDrafts, sweepDrafts, isWorthKeeping, newDraft, keyOf, draftTotal,
+} from "../src/data/drafts";
 import { parseIsoDate, weekKeyFor, formatIsoDate, addDays, BACKDATE_LIMIT_DAYS, earliestLoggableDate } from "../src/data/dates";
 import type { SessionRecord } from "../src/data/types";
 
-const OPTS = { weekStart: 1 as const, templates: DEFAULT_TEMPLATES, plan: findPlan("three-day") };
+const OPTS = { weekStart: 1 as const, templates: DEFAULT_TEMPLATES, plan: findPlan("three-day"), customSessions: 3 };
 const PPL = { ...OPTS, plan: findPlan("ppl") };
 const UL = { ...OPTS, plan: findPlan("upper-lower") };
+const CUSTOM = { ...OPTS, plan: findPlan(CUSTOM_PLAN_ID) };
 let fails = 0;
 function check(label: string, got: unknown, want: unknown) {
   const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -545,7 +552,7 @@ console.log("\n== labels and grouping ==");
 console.log("\n== starter content integrity ==");
 {
   check("ideas categories", SEED_IDEAS.length, 20);
-  check("rehab categories", SEED_REHAB.length, 16);
+  check("rehab categories", SEED_REHAB.length, 18);
 
   const slugs = STARTER_CONTENT.map((n) => `${n.category}/${n.slug}`);
   check("no duplicate files", new Set(slugs).size, slugs.length);
@@ -662,10 +669,19 @@ console.log("\n== ideas videos are wired to the page ==");
   check("rehab now has videos", rehabVids.length > 30, true);
   // Balance is the one area with no usable footage: the balance videos in the
   // sources are senior-falls content, which is the wrong framing here.
+  //
+  // Adductors and tibialis anterior are new in 0.3.1 and ship text only. Every
+  // id in this library is one that was actually checked against the video it
+  // claims to be; inventing a plausible eleven character id to close the gap
+  // would put a dead link under a named creator, which is worse than no link.
   const bare = STARTER_CONTENT.filter(
     (n) => n.category === "rehab" && (n.videos ?? []).length === 0,
   ).map((n) => n.slug);
-  check("only balance lacks video coverage", bare, ["balance"]);
+  check("areas awaiting video coverage", bare, [
+    "adductors",
+    "tibialis-anterior",
+    "balance",
+  ]);
 
   // the round trip that actually matters: seed -> markdown -> what the reader sees
   for (const slug of ["chest", "quads", "glutes", "start-here"]) {
@@ -707,5 +723,117 @@ console.log("\n== superseded categories ==");
   check("neck not swept", LEGACY_SLUGS.rehab.includes("neck"), false);
 }
 
+
+console.log("\n== custom routine ==");
+{
+  const custom = (day: number, sets: Record<string, number>): SessionRecord => {
+    const iso = `2026-08-0${day}`;
+    const date = parseIsoDate(iso)!;
+    return {
+      file: { path: `DOMS/log/${iso}-c${++n}.md` } as any,
+      date, dateIso: iso, weekKey: weekKeyFor(date, 1),
+      templateId: CUSTOM_TEMPLATE_ID, slot: "required",
+      sets, totalSets: Object.values(sets).reduce((a, b) => a + b, 0),
+      activity: null, planId: CUSTOM_PLAN_ID,
+    };
+  };
+
+  check("custom plan is flagged", isCustomPlan(findPlan(CUSTOM_PLAN_ID)), true);
+  check("custom prescribes nothing", findPlan(CUSTOM_PLAN_ID).slots.length, 0);
+  check("custom offers no bonus", bonusTemplatesFor(findPlan(CUSTOM_PLAN_ID), DEFAULT_TEMPLATES).length, 0);
+  check("session count clamps low", clampCustomSessions(0), 1);
+  check("session count clamps high", clampCustomSessions(99), 14);
+  check("session count rejects junk", clampCustomSessions("x"), 3);
+
+  const a = custom(3, { chest: 4, shoulders: 2 });
+  const b = custom(5, { quads: 6 });
+  const c = custom(6, { biceps: 3 });
+  const d = custom(7, { calves: 2 });
+  const mid = parseIsoDate("2026-08-05")!;
+  const end = parseIsoDate("2026-08-07")!;
+
+  const w2 = deriveWeekState([a, b], mid, CUSTOM);
+  check("2 of 3 done", [w2.requiredDone, w2.requiredTotal], [2, 3]);
+  check("pips match the bar", w2.slots.length, 3);
+  check("a logged workout is named by what it hit", w2.slots[0].name, "Chest & shoulders");
+  check("an unfilled one is a placeholder", w2.slots[2].name, "Workout 3");
+
+  const w3 = deriveWeekState([a, b, c], end, CUSTOM);
+  check("hitting the bar completes the week", w3.complete, true);
+
+  // Spec §2: extra sessions are a bonus and never raise the bar.
+  const w4 = deriveWeekState([a, b, c, d], end, CUSTOM);
+  check("a fourth does not raise the bar", [w4.requiredDone, w4.requiredTotal], [3, 3]);
+  check("a fourth still shows, as bonus", w4.bonusSessions.length, 1);
+  check("nothing to unlock on custom", w4.bonusUnlocked, false);
+  check("volume counts every session", w4.totalSets, 17);
+
+  check("a complete custom week streaks", computeStreaks([a, b, c], CUSTOM, end).current, 1);
+  check("an incomplete one does not", computeStreaks([a, b], CUSTOM, mid).current, 0);
+  check("raising the bar re-judges the week", computeStreaks([a, b, c], { ...CUSTOM, customSessions: 5 }, end).current, 0);
+
+  const tpl = findTemplate(CUSTOM_TEMPLATE_ID, DEFAULT_TEMPLATES)!;
+  check("the custom template prescribes nothing", Object.keys(tpl.sets).length, 0);
+  check("but still logs as gym work", tpl.kind, "strength");
+}
+
+console.log("\n== derived workout names ==");
+{
+  check("one body part", describeSets({ chest: 4 }), "Chest");
+  check("two, joined mid-phrase", describeSets({ chest: 4, shoulders: 2 }), "Chest & shoulders");
+  check("three or more collapse", describeSets({ chest: 4, shoulders: 2, triceps: 1 }), "Chest + 2 more");
+  check("uncounted parts are not named", describeSets({ chest: 4, shoulders: 0 }), "Chest");
+  check("nothing counted falls back", describeSets({}), "Custom workout");
+  check("canonical order, not insertion order", describeSets({ triceps: 1, chest: 2 }), "Chest & triceps");
+  check("an activity names itself", sessionLabel(other("2026-08-03", "Easy run"), DEFAULT_TEMPLATES), "Easy run");
+}
+
+console.log("\n== drafts ==");
+{
+  const d = newDraft("upper", parseIsoDate("2026-08-03")!);
+  check("keyed by workout and day", keyOf(d), "upper|2026-08-03");
+  check("an untouched draft is not kept", isWorthKeeping(d), false);
+  d.sets = { chest: 3 };
+  check("a counted one is", isWorthKeeping(d), true);
+  check("total is what was counted", draftTotal(d), 3);
+
+  // Drafts are untrusted JSON, exactly like settings.
+  check("junk normalizes to nothing", normalizeDrafts("nope"), {});
+  check("an unparseable date is dropped", normalizeDrafts({ a: { templateId: "upper", dateIso: "nope" } }), {});
+  check("a missing template is dropped", normalizeDrafts({ a: { dateIso: "2026-08-03" } }), {});
+  const clean = normalizeDrafts({
+    "upper|2026-08-03": {
+      templateId: "upper", dateIso: "2026-08-03",
+      sets: { chest: 3, negative: -2, fractional: 1.5, fine: 2 },
+      note: "hi", activity: "", updatedAt: Date.now(),
+    },
+  });
+  check("only whole non-negative counts survive", clean["upper|2026-08-03"].sets, { chest: 3, fine: 2 });
+
+  const now = Date.now();
+  const swept = sweepDrafts({
+    fresh: { templateId: "a", dateIso: "2026-08-03", sets: { chest: 1 }, note: "", activity: "", updatedAt: now },
+    stale: { templateId: "b", dateIso: "2026-08-03", sets: { chest: 1 }, note: "", activity: "", updatedAt: now - 8 * 864e5 },
+    empty: { templateId: "c", dateIso: "2026-08-03", sets: {}, note: "", activity: "", updatedAt: now },
+  }, now);
+  check("stale and empty drafts are swept on load", Object.keys(swept), ["fresh"]);
+}
+
+console.log("\n== rehab coverage ==");
+{
+  // 0.3.1 audit: the two genuine gaps in the body part list.
+  check("adductors are offered", findMuscle("adductors")?.label, "Adductors & groin");
+  check("tibialis anterior is offered", findMuscle("tibialis anterior")?.label, "Shins & tibialis");
+  check("hip flexors were already there", findMuscle("hip flexors")?.label, "Hip flexors");
+  check("feet were already there", findMuscle("feet")?.label, "Feet & arches");
+  check("new areas carry no weekly target", [isTracked("adductors"), isTracked("tibialis anterior")], [false, false]);
+  check("both reach the rehab sheet", [REHAB_AREAS.includes("adductors"), REHAB_AREAS.includes("tibialis anterior")], [true, true]);
+
+  // The rehab template is built from REHAB_AREAS, so the two cannot drift.
+  const rehab = findTemplate("rehab", DEFAULT_TEMPLATES)!;
+  check("every rehab area is on the sheet", REHAB_AREAS.every((a) => a in rehab.sets), true);
+  check("new areas start at zero", rehab.sets["adductors"], 0);
+  check("the common ones keep their suggestion", rehab.sets["rotator cuff"], 3);
+}
 
 console.log(fails === 0 ? "\nALL PASS" : `\n${fails} FAILURES`);

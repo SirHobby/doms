@@ -26,14 +26,10 @@ class ActivityBlock extends DomsWidgetBlock {
   }
 
   protected paint(): void {
-    const { data, settings } = this.plugin;
+    const { data } = this.plugin;
     renderActivityWidget(this.containerEl, {
       sessions: data.sessions(),
-      stats: {
-        weekStart: settings.weekStart,
-        templates: data.templates,
-        plan: data.plan,
-      },
+      stats: data.options,
       options: this.options,
     });
   }

@@ -2,7 +2,15 @@ import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type DomsPlugin from "../main";
 import { DAY_NAMES, isWeekDay } from "../data/dates";
 import { DEFAULT_ROOT_FOLDER, normalizeRoot } from "../data/paths";
-import { findPlan, PLANS, type Plan } from "../data/plans";
+import {
+  clampCustomSessions,
+  findPlan,
+  isCustomPlan,
+  MAX_CUSTOM_SESSIONS,
+  MIN_CUSTOM_SESSIONS,
+  PLANS,
+  type Plan,
+} from "../data/plans";
 import { findTemplate } from "../data/templates";
 import { celebrationImages } from "../data/celebration-media";
 import { exportQuoteBank, QUOTES_FILENAME } from "../data/quote-store";
@@ -58,6 +66,8 @@ export class DomsSettingTab extends PluginSettingTab {
           });
       });
 
+    if (isCustomPlan(plan)) this.renderCustomSessions(containerEl);
+
     new Setting(containerEl)
       .setName("Week start day")
       .setDesc(
@@ -77,6 +87,30 @@ export class DomsSettingTab extends PluginSettingTab {
             this.offerWeekKeyRepair();
           });
       });
+  }
+
+  /**
+   * The custom routine's only prescription: how many times a week you intend to
+   * turn up. Everything the plugin does with a week — the pips, the streak, the
+   * celebration tiers — needs a number to compare against, and on this plan
+   * there are no slots to count.
+   */
+  private renderCustomSessions(containerEl: HTMLElement): void {
+    new Setting(containerEl)
+      .setName("Sessions a week")
+      .setDesc(
+        "Your bar for a complete week. Any workout you log counts toward it, whatever it was. Extra sessions are a bonus and never raise it.",
+      )
+      .addSlider((slider) =>
+        slider
+          .setLimits(MIN_CUSTOM_SESSIONS, MAX_CUSTOM_SESSIONS, 1)
+          .setValue(this.plugin.settings.customSessions)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.settings.customSessions = clampCustomSessions(value);
+            await this.plugin.saveSettings();
+          }),
+      );
   }
 
   /**
@@ -117,6 +151,16 @@ export class DomsSettingTab extends PluginSettingTab {
     const frag = new DocumentFragment();
     frag.appendText(plan.description);
     frag.createEl("br");
+
+    // A custom routine prescribes no sessions, so listing them would read
+    // "0 sessions a week". Its bar is the slider below instead.
+    if (isCustomPlan(plan)) {
+      const n = this.plugin.settings.customSessions;
+      frag.createEl("strong", {
+        text: `${n} session${n === 1 ? "" : "s"} a week, whatever they are.`,
+      });
+      return frag;
+    }
 
     const counts = new Map<string, number>();
     for (const id of plan.slots) counts.set(id, (counts.get(id) ?? 0) + 1);

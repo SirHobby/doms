@@ -22,11 +22,7 @@ export class StatsTab extends DomsTab {
     const { data } = context.plugin;
 
     const sessions = data.sessions();
-    const options: StatsOptions = {
-      weekStart: context.plugin.settings.weekStart,
-      templates: data.templates,
-      plan: data.plan,
-    };
+    const options: StatsOptions = data.options;
 
     this.addChild(new MetricCards(body, summarize(sessions, options)));
 

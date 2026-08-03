@@ -1,7 +1,12 @@
 import { Platform } from "obsidian";
 import { DEFAULT_WEEK_START, isWeekDay, WeekDay } from "../data/dates";
 import { DEFAULT_ROOT_FOLDER, normalizeRoot } from "../data/paths";
-import { DEFAULT_PLAN_ID, PLANS } from "../data/plans";
+import {
+  clampCustomSessions,
+  DEFAULT_CUSTOM_SESSIONS,
+  DEFAULT_PLAN_ID,
+  PLANS,
+} from "../data/plans";
 
 /**
  * Accent presets from spec §6. "inherit" is the default and is represented as
@@ -63,6 +68,12 @@ export interface DomsSettings {
   /** Plan */
   planId: string;
   weekStart: WeekDay;
+  /**
+   * The weekly bar on the custom routine, which prescribes no sessions of its
+   * own. Ignored by every other plan, but kept when you switch away and back
+   * rather than reset, because it is a preference, not plan state.
+   */
+  customSessions: number;
 
   /** Celebration */
   celebrationMode: CelebrationMode;
@@ -78,6 +89,7 @@ export const DEFAULT_SETTINGS: DomsSettings = {
   titleSize: "auto",
   planId: DEFAULT_PLAN_ID,
   weekStart: DEFAULT_WEEK_START,
+  customSessions: DEFAULT_CUSTOM_SESSIONS,
   celebrationMode: "animation",
   celebrationFolder: "",
   rootFolder: DEFAULT_ROOT_FOLDER,
@@ -121,6 +133,7 @@ export function normalizeSettings(raw: unknown): DomsSettings {
     weekStart: isWeekDay(data.weekStart)
       ? data.weekStart
       : DEFAULT_SETTINGS.weekStart,
+    customSessions: clampCustomSessions(data.customSessions),
     celebrationMode:
       data.celebrationMode === "folder" ? "folder" : "animation",
     celebrationFolder:

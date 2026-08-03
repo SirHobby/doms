@@ -1,7 +1,9 @@
 import { Component, type App } from "obsidian";
-import { today, type CivilDate, type WeekDay } from "../../data/dates";
+import { formatIsoDate, today, type CivilDate, type WeekDay } from "../../data/dates";
 import { muscleLabel, type MuscleGroup } from "../../data/muscles";
-import type { Template } from "../../data/templates";
+import type { SessionDraft } from "../../data/drafts";
+import { draftDate, keyOf, newDraft } from "../../data/drafts";
+import { CUSTOM_TEMPLATE_ID, type Template } from "../../data/templates";
 import { sumSets } from "../../data/templates";
 import { MusclePickerModal } from "../../ui/muscle-picker-modal";
 import { SheetHeader } from "./sheet-header";
@@ -14,7 +16,14 @@ export interface SessionSheetOptions {
   weekStart: WeekDay;
   /** Seeds the header when the flow already chose a day. */
   date?: CivilDate;
+  /** An in-progress session to pick back up, if there is one. */
+  draft?: SessionDraft | null;
   onBack: () => void;
+  /**
+   * Fires on every edit. The sheet holds nothing on disk, so this is what makes
+   * a half-counted workout survive leaving the view.
+   */
+  onDraft?: (draft: SessionDraft, previousKey: string) => void;
   onCommit: (
     sets: Record<MuscleGroup, number>,
     note: string,
@@ -25,9 +34,14 @@ export interface SessionSheetOptions {
 /**
  * The session sheet (spec §4.2).
  *
- * Nothing is written to disk until "Log as planned" is pressed. That is what
- * makes cancel and undo trivial, and it means one celebration per gym visit
+ * Nothing is written to the *log* until "Log as planned" is pressed. That is
+ * what makes cancel and undo trivial, and it means one celebration per gym visit
  * rather than one per rack.
+ *
+ * Counting, though, is saved continuously. The two are not in tension: a draft
+ * is plugin state that produces no note, no week credit and no stats, so undo
+ * stays a single file deletion — while walking away mid-session, which is the
+ * normal way this screen gets used, no longer costs you the workout.
  */
 export class SessionSheet extends Component {
   /** What the user has actually counted. Starts at zero for every group. */
@@ -43,19 +57,41 @@ export class SessionSheet extends Component {
   /** Where added rows mount: before the "+" card, after the planned ones. */
   private listEl: HTMLElement | null = null;
   private addEl: HTMLElement | null = null;
+  private emptyEl: HTMLElement | null = null;
   /** Body parts the user added to this session, and their stepper. */
   private readonly extras = new Map<MuscleGroup, Stepper>();
+
+  /** The draft being written to. Its key moves if the date changes. */
+  private draft: SessionDraft;
+
+  /**
+   * A workout the plan never prescribed: no goals, no "log as planned" fast
+   * path, and the body part list starts empty.
+   */
+  private readonly isCustom: boolean;
 
   constructor(
     private readonly parent: HTMLElement,
     private readonly options: SessionSheetOptions,
   ) {
     super();
+    this.isCustom = options.template.id === CUSTOM_TEMPLATE_ID;
     this.goals = { ...options.template.sets };
+
+    const draft = options.draft;
+    this.draft = draft
+      ? { ...draft, sets: { ...draft.sets } }
+      : newDraft(options.template.id, options.date ?? today());
+
     // Count up during the session rather than editing a pre-filled plan down.
+    // A restored draft brings back both the planned rows and any body parts the
+    // user added before they walked away.
     this.sets = Object.fromEntries(
       Object.keys(this.goals).map((muscle) => [muscle, 0]),
     );
+    for (const [muscle, count] of Object.entries(this.draft.sets)) {
+      this.sets[muscle] = count;
+    }
   }
 
   onload(): void {
@@ -67,27 +103,49 @@ export class SessionSheet extends Component {
     const list = root.createDiv({ cls: "doms-sheet-list" });
     this.listEl = list;
 
-    for (const muscle of Object.keys(this.goals)) {
+    // Restored extras have to render as extras — removable, no goal — even
+    // though they are indistinguishable from planned rows in `sets`.
+    const planned = new Set(Object.keys(this.goals));
+
+    for (const muscle of planned) {
       this.addChild(
         new Stepper(list, {
           label: muscleLabel(muscle),
-          value: 0,
+          value: this.sets[muscle] ?? 0,
           goal: this.goals[muscle],
           onChange: (value) => {
             this.sets[muscle] = value;
-            this.paintTotal();
+            this.onChanged();
           },
         }),
       );
     }
 
+    this.renderEmpty(list);
     this.renderAddCard(list);
 
+    for (const muscle of Object.keys(this.sets)) {
+      if (!planned.has(muscle)) this.mountExtra(muscle);
+    }
+
     this.totalEl = root.createDiv({ cls: "doms-sheet-total" });
-    this.paintTotal();
 
     this.renderNote(root);
     this.renderActions(root);
+    this.paintTotal();
+  }
+
+  /**
+   * The custom sheet opens with nothing on it, which without a word of
+   * explanation reads as a broken screen rather than an invitation.
+   */
+  private renderEmpty(list: HTMLElement): void {
+    if (!this.isCustom) return;
+
+    this.emptyEl = list.createDiv({
+      cls: "doms-sheet-empty",
+      text: "Add the body parts you trained.",
+    });
   }
 
   /**
@@ -117,16 +175,23 @@ export class SessionSheet extends Component {
     if (muscle in this.sets || !this.listEl) return;
 
     this.sets[muscle] = 0;
+    this.mountExtra(muscle);
+    this.onChanged();
+  }
+
+  /** Renders one user-added row and keeps the "+" last in the list. */
+  private mountExtra(muscle: MuscleGroup): void {
+    if (!this.listEl) return;
 
     // No goal: the plan never asked for this, so there is nothing to be short
     // of. It still counts toward the weekly bar if the group is a tracked one.
     const stepper = new Stepper(this.listEl, {
       label: muscleLabel(muscle),
-      value: 0,
+      value: this.sets[muscle] ?? 0,
       onRemove: () => this.removeMuscle(muscle),
       onChange: (value) => {
         this.sets[muscle] = value;
-        this.paintTotal();
+        this.onChanged();
       },
     });
     this.addChild(stepper);
@@ -134,8 +199,7 @@ export class SessionSheet extends Component {
 
     // Keep the "+" last, so the list always ends with the way to extend it.
     if (this.addEl) this.listEl.appendChild(this.addEl);
-
-    this.paintTotal();
+    this.paintEmpty();
   }
 
   private removeMuscle(muscle: MuscleGroup): void {
@@ -145,7 +209,12 @@ export class SessionSheet extends Component {
     this.removeChild(stepper);
     this.extras.delete(muscle);
     delete this.sets[muscle];
-    this.paintTotal();
+    this.paintEmpty();
+    this.onChanged();
+  }
+
+  private paintEmpty(): void {
+    this.emptyEl?.toggleClass("is-hidden", Object.keys(this.sets).length > 0);
   }
 
   private renderHeader(root: HTMLElement): void {
@@ -153,10 +222,18 @@ export class SessionSheet extends Component {
       title: this.options.template.name,
       app: this.options.app,
       weekStart: this.options.weekStart,
-      date: this.options.date,
+      date: draftDate(this.draft),
       onBack: () => this.options.onBack(),
+      onDateChange: (date) => this.onDateChanged(date),
     });
     this.addChild(this.header);
+  }
+
+  /** The draft follows the day it is for, rather than staying under the old key. */
+  private onDateChanged(date: CivilDate): void {
+    const previousKey = keyOf(this.draft);
+    this.draft.dateIso = formatIsoDate(date);
+    this.emitDraft(previousKey);
   }
 
   private renderNote(root: HTMLElement): void {
@@ -169,11 +246,7 @@ export class SessionSheet extends Component {
     toggle.type = "button";
     toggle.setAttribute("aria-expanded", "false");
 
-    this.registerDomEvent(toggle, "click", () => {
-      if (this.noteEl) {
-        this.noteEl.focus();
-        return;
-      }
+    const open = () => {
       const field = wrapper.createEl("textarea", {
         cls: "doms-sheet-textarea",
         attr: {
@@ -182,10 +255,24 @@ export class SessionSheet extends Component {
           "aria-label": "Note about today",
         },
       });
+      field.value = this.draft.note;
       this.noteEl = field;
       toggle.setAttribute("aria-expanded", "true");
       toggle.detach();
-      field.focus();
+      this.registerDomEvent(field, "input", () => this.onChanged());
+      return field;
+    };
+
+    // A restored note is the whole reason to reopen the field unprompted:
+    // hiding typed text behind a button reads as having lost it.
+    if (this.draft.note) open();
+
+    this.registerDomEvent(toggle, "click", () => {
+      if (this.noteEl) {
+        this.noteEl.focus();
+        return;
+      }
+      open().focus();
     });
   }
 
@@ -208,8 +295,7 @@ export class SessionSheet extends Component {
 
       try {
         await this.options.onCommit(
-          // Nothing counted means "I did the plan" — the one-tap fast path.
-          sumSets(this.sets) === 0 ? { ...this.goals } : { ...this.sets },
+          this.payload(),
           this.noteEl?.value.trim() ?? "",
           this.header?.value ?? today(),
         );
@@ -219,18 +305,48 @@ export class SessionSheet extends Component {
     });
   }
 
+  /**
+   * What gets logged. Nothing counted means "I did the plan" — the one-tap fast
+   * path — except on a custom workout, which has no plan to fall back on.
+   */
+  private payload(): Record<MuscleGroup, number> {
+    if (this.isCustom || sumSets(this.sets) > 0) return { ...this.sets };
+    return { ...this.goals };
+  }
+
+  /** Records the edit, then repaints the total and the button. */
+  private onChanged(): void {
+    this.draft.sets = { ...this.sets };
+    this.draft.note = this.noteEl?.value ?? "";
+    this.draft.updatedAt = Date.now();
+    this.emitDraft(keyOf(this.draft));
+    this.paintTotal();
+  }
+
+  private emitDraft(previousKey: string): void {
+    this.options.onDraft?.({ ...this.draft, sets: { ...this.sets } }, previousKey);
+  }
+
   private paintTotal(): void {
     const total = sumSets(this.sets);
     const goal = sumSets(this.goals);
 
-    this.totalEl?.setText(`${total} of ${goal} sets`);
+    this.totalEl?.setText(
+      goal > 0
+        ? `${total} of ${goal} sets`
+        : `${total} ${total === 1 ? "set" : "sets"}`,
+    );
     this.totalEl?.toggleClass("is-met", total >= goal && goal > 0);
 
     // Untouched, the button logs the plan. Once you have counted anything, it
-    // logs what you counted.
+    // logs what you counted. A custom workout can only ever log what you counted,
+    // so it stays disabled until there is something to log.
     if (this.commitEl && !this.committing) {
+      this.commitEl.disabled = this.isCustom && total === 0;
       this.commitEl.setText(
-        total === 0 ? "Log as planned" : `Log ${total} ${total === 1 ? "set" : "sets"}`,
+        total === 0 && !this.isCustom
+          ? "Log as planned"
+          : `Log ${total} ${total === 1 ? "set" : "sets"}`,
       );
     }
   }

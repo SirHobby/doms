@@ -12,13 +12,15 @@ Your training history is plain markdown in your own vault. If this plugin disapp
 
 **Week** — your routine as a set of slots. Tap one, count your sets as you go, log it. One tap logs the whole session as planned if you did exactly that. Trained something the session doesn't list? Tap **+** to add any body part — abs after push day, grip work, whatever it was — and it logs like the rest.
 
-Forgot yesterday? Every logging screen carries a date, so you can put the session on the day it actually happened. For a week that has already closed, **Log a previous workout** at the bottom of the Week tab asks for the day first, then the workout. Backdating reaches 30 days, and a backdated session counts fully toward that week's totals, completion and streak.
+Counting is saved as you go. Put your phone away between sets, switch to another note, come back tomorrow — the workout is still there, marked **In progress** on its card, with **Continue** and **Discard**. Nothing reaches your log until you commit it, so undo stays a single deleted file.
+
+Forgot yesterday? Every logging screen carries a date, so you can put the session on the day it actually happened. **Log a custom workout** at the bottom of the Week tab covers anything your routine didn't ask for — a missed session, an extra one, or something that fits no template at all. Pick the body parts you trained and log it; change the date in the header if it wasn't today. Backdating reaches 30 days, and a backdated session counts fully toward that week's totals, completion and streak.
 
 **Stats** — sessions, current and best week streak, total sets, a month-by-month activity calendar, and **this week's sets** for each body part against what your routine asks of it, as a bar you can watch move.
 
 **Ideas** — a browsable exercise library across 20 categories, with technique videos. Grouped and collapsed by default, so it opens as a short list rather than a wall of tabs.
 
-**Rehab** — physio-style strengthening for the small stabilising muscles that heavy lifts under-train. Rotator cuff, shoulder blades, hips, ankles, feet, wrists and more.
+**Rehab** — physio-style strengthening for the small stabilising muscles that heavy lifts under-train. Rotator cuff, shoulder blades, hips, adductors, knees, shins, ankles, feet, wrists and more.
 
 ---
 
@@ -29,6 +31,9 @@ Forgot yesterday? Every logging screen carries a date, so you can put the sessio
 | **Three days a week** *(default)* | Upper · Lower · Full body | ~49 |
 | **Upper / lower, five days** | Upper ×2 · Lower ×2 · Cardio | ~64 |
 | **Push / pull / legs, seven days** | Push ×2 · Pull ×2 · Legs ×2 · Cardio | ~132 |
+| **Custom** | Nothing prescribed — you set the number | — |
+
+On **Custom** there are no preset workouts. Build each session from the body parts you actually trained, and set your own bar for the week in settings. Any workout you log counts toward it, whatever it was, and — as on every other routine — extra sessions are a bonus that never raises the bar.
 
 Weekly volume targets are **derived from whichever routine you pick**, never hardcoded, so a perfectly executed week never reads as a failure. Push / pull / legs is sized so every tracked body part lands on twelve sets a week — six gym days should deliver more than three.
 
